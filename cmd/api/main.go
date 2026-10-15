@@ -8,6 +8,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/gabriela-miranda-leite/lastro-api/config"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/db"
 )
 
 func main() {
@@ -18,6 +19,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	defer database.Close()
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
