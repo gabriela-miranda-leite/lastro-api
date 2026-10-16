@@ -20,6 +20,27 @@ func NewHandler(service *Service) *Handler {
 // RegisterRoutes registers routes on the given router group.
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/register", h.register)
+	rg.POST("/login", h.login)
+}
+
+func (h *Handler) login(c *gin.Context) {
+	var input LoginInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := h.service.Login(c.Request.Context(), input)
+	if err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *Handler) register(c *gin.Context) {
