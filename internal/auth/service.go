@@ -69,6 +69,37 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (AuthRespon
 	}, nil
 }
 
+func (s *Service) Login(ctx context.Context, input LoginInput) (AuthResponse, error) {
+	user, err := s.repo.findUserByEmail(ctx, input.Email)
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Login: %w", err)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password)); err != nil {
+		return AuthResponse{}, ErrInvalidCredentials
+	}
+
+	accessToken, err := s.generateAccessToken(user.ID)
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Login: %w", err)
+	}
+
+	rawRefresh, refreshHash, err := generateRefreshToken()
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Login: %w", err)
+	}
+
+	if err := s.repo.saveRefreshToken(ctx, user.ID, refreshHash); err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Login: %w", err)
+	}
+
+	return AuthResponse{
+		User:         UserResponse{ID: user.ID, Name: user.Name, Email: user.Email},
+		AccessToken:  accessToken,
+		RefreshToken: rawRefresh,
+	}, nil
+}
+
 func (s *Service) generateAccessToken(userID string) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": userID,

@@ -12,6 +12,9 @@ import (
 // ErrEmailConflict is returned when a user with the same email already exists.
 var ErrEmailConflict = errors.New("email already in use")
 
+// ErrInvalidCredentials is returned when email or password don't match.
+var ErrInvalidCredentials = errors.New("invalid credentials")
+
 // Repository handles data access for the auth domain.
 type Repository struct {
 	db *sql.DB
@@ -65,4 +68,30 @@ func (r *Repository) saveRefreshToken(ctx context.Context, userID, tokenHash str
 	}
 
 	return nil
+}
+
+type loginUserRow struct {
+	ID           string
+	Name         string
+	Email        string
+	PasswordHash string
+}
+
+func (r *Repository) findUserByEmail(ctx context.Context, email string) (loginUserRow, error) {
+	const q = `
+		SELECT id, name, email, password_hash
+		FROM users
+		WHERE email = $1 AND deleted_at IS NULL`
+
+	var row loginUserRow
+	err := r.db.QueryRowContext(ctx, q, email).
+		Scan(&row.ID, &row.Name, &row.Email, &row.PasswordHash)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return loginUserRow{}, ErrInvalidCredentials
+		}
+		return loginUserRow{}, fmt.Errorf("auth.repository.findUserByEmail: %w", err)
+	}
+
+	return row, nil
 }

@@ -7,6 +7,12 @@ type RegisterInput struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// LoginInput is the request body for POST /auth/login.
+type LoginInput struct {
+	Email    string `json:"email"    binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+}
+
 // UserResponse is the public user representation returned in responses.
 type UserResponse struct {
 	ID    string `json:"id"`
