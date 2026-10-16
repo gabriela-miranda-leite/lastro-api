@@ -1,74 +1,73 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
 
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/gabriela-miranda-leite/lastro-api
+
 linters:
   enable:
-    - errcheck        # ensures error returns are always handled
-    - gosimple        # simplification suggestions
-    - govet           # reports suspicious constructs
-    - ineffassign     # detects unused assignments
-    - staticcheck     # static analysis
-    - unused          # checks for unused code
-    - gofmt           # enforces standard formatting
-    - goimports       # enforces import ordering
-    - gocritic        # opinionated code analysis
-    - misspell        # checks for common misspellings
-    - noctx           # finds http.Request usages without context
-    - bodyclose       # checks http response body is closed
-    - contextcheck    # checks context is passed correctly
-    - exhaustive      # checks exhaustiveness of enum switches
-    - godot           # checks that comments end with a period
-    - nilerr          # finds code that returns nil even if error is not nil
-    - nilnil          # checks for nil,nil returns
-    - wrapcheck       # ensures errors from external packages are wrapped
-    - forbidigo       # forbids specific patterns (configured below)
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocritic
+    - misspell
+    - noctx
+    - bodyclose
+    - contextcheck
+    - exhaustive
+    - godot
+    - nilerr
+    - nilnil
+    - wrapcheck
+    - forbidigo
 
-linters-settings:
-  gofmt:
-    simplify: true
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
 
-  goimports:
-    local-prefixes: github.com/gabriela-miranda-leite/lastro-api
+    misspell:
+      locale: US
 
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
+    forbidigo:
+      forbid:
+        - pattern: "^fmt\\.Print"
+          msg: "use structured logging (slog) instead of fmt.Print"
+        - pattern: "^log\\.Print"
+          msg: "use structured logging (slog) instead of log.Print"
+        - pattern: "^time\\.Sleep"
+          msg: "time.Sleep is not allowed in production code"
+        - pattern: "^panic"
+          msg: "panic is not allowed outside of main.go"
 
-  misspell:
-    locale: US
-
-  forbidigo:
-    forbid:
-      - pattern: "^fmt\\.Print"
-        msg: "use structured logging (slog) instead of fmt.Print"
-      - pattern: "^log\\.Print"
-        msg: "use structured logging (slog) instead of log.Print"
-      - pattern: "^time\\.Sleep"
-        msg: "time.Sleep is not allowed in production code"
-      - pattern: "^panic"
-        msg: "panic is not allowed outside of main.go"
-
-  wrapcheck:
-    ignorePackageGlobs:
-      - "github.com/gabriela-miranda-leite/lastro-api/*"
+    wrapcheck:
+      ignorePackageGlobs:
+        - "github.com/gabriela-miranda-leite/lastro-api/*"
 
 issues:
   exclude-rules:
-    # allow unused in test files (mocks, helpers)
     - path: "_test\\.go"
       linters:
         - unused
         - wrapcheck
-
-    # allow godot in test files
-    - path: "_test\\.go"
-      linters:
         - godot
 
-    # allow fmt in main.go for startup messages
     - path: "cmd/api/main\\.go"
       linters:
         - forbidigo
