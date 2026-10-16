@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -88,11 +89,8 @@ func generateRefreshToken() (raw, hash string, err error) {
 		return "", "", fmt.Errorf("generateRefreshToken: %w", err)
 	}
 	raw = hex.EncodeToString(b)
-	h, err := bcrypt.GenerateFromPassword([]byte(raw), 10)
-	if err != nil {
-		return "", "", fmt.Errorf("generateRefreshToken: hash: %w", err)
-	}
-	return raw, string(h), nil
+	sum := sha256.Sum256([]byte(raw))
+	return raw, hex.EncodeToString(sum[:]), nil
 }
 
 func validatePassword(p string) error {
