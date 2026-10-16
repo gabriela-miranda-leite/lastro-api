@@ -1,11 +1,115 @@
 package auth
 
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"time"
+	"unicode"
+
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
+)
+
+var (
+	ErrWeakPassword = errors.New("password must be at least 8 characters, contain one uppercase letter and one number")
+)
+
 // Service contains business logic for the auth domain.
 type Service struct {
-	repo *Repository
+	repo      *Repository
+	jwtSecret []byte
 }
 
 // NewService creates a new Service.
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, jwtSecret string) *Service {
+	return &Service{repo: repo, jwtSecret: []byte(jwtSecret)}
+}
+
+func (s *Service) Register(ctx context.Context, input RegisterInput) (AuthResponse, error) {
+	if err := validatePassword(input.Password); err != nil {
+		return AuthResponse{}, err
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), 12)
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Register: hash: %w", err)
+	}
+
+	user, err := s.repo.createUser(ctx, createUserParams{
+		Name:         input.Name,
+		Email:        input.Email,
+		PasswordHash: string(hash),
+	})
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Register: %w", err)
+	}
+
+	accessToken, err := s.generateAccessToken(user.ID)
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Register: %w", err)
+	}
+
+	rawRefresh, refreshHash, err := generateRefreshToken()
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Register: %w", err)
+	}
+
+	if err := s.repo.saveRefreshToken(ctx, user.ID, refreshHash); err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Register: %w", err)
+	}
+
+	return AuthResponse{
+		User:         UserResponse(user),
+		AccessToken:  accessToken,
+		RefreshToken: rawRefresh,
+	}, nil
+}
+
+func (s *Service) generateAccessToken(userID string) (string, error) {
+	claims := jwt.MapClaims{
+		"sub": userID,
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iat": time.Now().Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString(s.jwtSecret)
+	if err != nil {
+		return "", fmt.Errorf("generateAccessToken: %w", err)
+	}
+	return signed, nil
+}
+
+func generateRefreshToken() (raw, hash string, err error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", "", fmt.Errorf("generateRefreshToken: %w", err)
+	}
+	raw = hex.EncodeToString(b)
+	h, err := bcrypt.GenerateFromPassword([]byte(raw), 10)
+	if err != nil {
+		return "", "", fmt.Errorf("generateRefreshToken: hash: %w", err)
+	}
+	return raw, string(h), nil
+}
+
+func validatePassword(p string) error {
+	if len(p) < 8 {
+		return ErrWeakPassword
+	}
+	var hasUpper, hasDigit bool
+	for _, r := range p {
+		if unicode.IsUpper(r) {
+			hasUpper = true
+		}
+		if unicode.IsDigit(r) {
+			hasDigit = true
+		}
+	}
+	if !hasUpper || !hasDigit {
+		return ErrWeakPassword
+	}
+	return nil
 }

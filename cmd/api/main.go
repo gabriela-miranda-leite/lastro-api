@@ -8,6 +8,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/gabriela-miranda-leite/lastro-api/config"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/auth"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/db"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/health"
 )
@@ -38,6 +39,10 @@ func main() {
 	r.Use(gin.Recovery())
 
 	r.GET("/health", health.NewHandler(database).Check)
+
+	authHandler := auth.NewHandler(auth.NewService(auth.NewRepository(database), cfg.JWTSecret))
+	v1 := r.Group("/v1")
+	authHandler.RegisterRoutes(v1.Group("/auth"))
 
 	slog.Info("starting lastro-api", "port", cfg.Port, "env", cfg.Env)
 	if err := r.Run(":" + cfg.Port); err != nil {
