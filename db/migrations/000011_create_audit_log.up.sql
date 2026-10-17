@@ -10,4 +10,11 @@ CREATE TABLE audit_log (
 CREATE INDEX idx_audit_log_user_id ON audit_log(user_id);
 CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
 
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'lastro') THEN
+    CREATE ROLE lastro;
+  END IF;
+END
+$$;
 REVOKE UPDATE, DELETE ON audit_log FROM lastro;
