@@ -14,6 +14,9 @@ var ErrInviteExpired = errorSentinel("invite expired")
 // ErrSelfJoin is returned when a user tries to accept their own invite.
 var ErrSelfJoin = errorSentinel("cannot accept own invite")
 
+// ErrNotInCouple is returned when the user is not part of any couple.
+var ErrNotInCouple = errorSentinel("not in couple")
+
 type errorSentinel string
 
 func (e errorSentinel) Error() string { return string(e) }

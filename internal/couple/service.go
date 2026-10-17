@@ -22,6 +22,25 @@ func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
 }
 
+// Unlink removes the couple relationship for both users and writes audit_log entries.
+// Returns ErrNotInCouple if the user is not part of any couple.
+func (s *Service) Unlink(ctx context.Context, userID string) error {
+	coupleID, err := s.repo.findCoupleID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("couple.service.Unlink: %w", err)
+	}
+
+	partnerID, err := s.repo.findPartnerID(ctx, userID, coupleID)
+	if err != nil {
+		return fmt.Errorf("couple.service.Unlink: %w", err)
+	}
+
+	if err := s.repo.unlink(ctx, userID, partnerID, coupleID); err != nil {
+		return fmt.Errorf("couple.service.Unlink: %w", err)
+	}
+	return nil
+}
+
 // Join accepts an invite code and links the joiner with the inviter as a couple.
 // Returns ErrInviteNotFound, ErrInviteExpired, ErrSelfJoin, or ErrAlreadyInCouple on failure.
 func (s *Service) Join(ctx context.Context, joinerID, code string) (JoinResponse, error) {

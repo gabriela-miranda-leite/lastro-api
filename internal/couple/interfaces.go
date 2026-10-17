@@ -9,4 +9,7 @@ type repository interface {
 	codeExists(ctx context.Context, code string) (bool, error)
 	findInviteByCode(ctx context.Context, code string) (InviteRecord, error)
 	joinCouple(ctx context.Context, inviteID, inviterID, joinerID string) (JoinResponse, error)
+	findCoupleID(ctx context.Context, userID string) (string, error)
+	findPartnerID(ctx context.Context, userID, coupleID string) (string, error)
+	unlink(ctx context.Context, userID, partnerID, coupleID string) error
 }
