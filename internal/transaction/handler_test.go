@@ -583,3 +583,85 @@ func TestHandler_Delete_InternalError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Contains(t, w.Body.String(), "internal server error")
 }
+
+// --- Idempotência ---
+
+func TestIntegration_Idempotency(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	t.Run("same client_id twice returns 200 on second call with identical response", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "idem_twice@test.com", "Senha123")
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655450001","amount":99.99,"direction":"out","date":"2026-10-01"}`
+
+		w1 := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+		require.Equal(t, http.StatusCreated, w1.Code)
+		var first map[string]any
+		require.NoError(t, json.Unmarshal(w1.Body.Bytes(), &first))
+
+		w2 := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+		assert.Equal(t, http.StatusOK, w2.Code)
+		var second map[string]any
+		require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &second))
+
+		assert.Equal(t, first["id"], second["id"], "same id returned on retry")
+		assert.Equal(t, first["amount"], second["amount"], "same amount returned on retry")
+		assert.Equal(t, first["created_at"], second["created_at"], "created_at must not change")
+
+		var count int
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT COUNT(*) FROM transactions WHERE client_id = '550e8400-e29b-41d4-a716-446655450001'`,
+		).Scan(&count))
+		assert.Equal(t, 1, count, "no duplicate in database")
+	})
+
+	t.Run("different client_ids with same data create two distinct transactions", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "idem_diff@test.com", "Senha123")
+
+		w1 := req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655450002","amount":10,"direction":"out","date":"2026-10-01"}`,
+			token)
+		require.Equal(t, http.StatusCreated, w1.Code)
+
+		w2 := req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655450003","amount":10,"direction":"out","date":"2026-10-01"}`,
+			token)
+		require.Equal(t, http.StatusCreated, w2.Code)
+
+		var r1, r2 map[string]any
+		require.NoError(t, json.Unmarshal(w1.Body.Bytes(), &r1))
+		require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &r2))
+		assert.NotEqual(t, r1["id"], r2["id"], "different client_ids must produce different transactions")
+
+		var count int
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT COUNT(*) FROM transactions
+			  WHERE client_id IN (
+			    '550e8400-e29b-41d4-a716-446655450002',
+			    '550e8400-e29b-41d4-a716-446655450003'
+			  )`,
+		).Scan(&count))
+		assert.Equal(t, 2, count, "two separate rows in database")
+	})
+
+	t.Run("network retry simulation: same client_id three times yields one row", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "idem_retry@test.com", "Senha123")
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655450004","amount":200,"direction":"in","date":"2026-10-15"}`
+
+		codes := make([]int, 3)
+		for i := range codes {
+			w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+			codes[i] = w.Code
+		}
+
+		assert.Equal(t, http.StatusCreated, codes[0], "first call must be 201")
+		assert.Equal(t, http.StatusOK, codes[1], "second call must be 200")
+		assert.Equal(t, http.StatusOK, codes[2], "third call must be 200")
+
+		var count int
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT COUNT(*) FROM transactions WHERE client_id = '550e8400-e29b-41d4-a716-446655450004'`,
+		).Scan(&count))
+		assert.Equal(t, 1, count, "exactly one row after three retries")
+	})
+}
