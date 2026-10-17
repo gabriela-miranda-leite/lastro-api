@@ -252,3 +252,128 @@ func TestService_Create_InsertError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "insert error")
 }
+
+// --- List ---
+
+func listInput() ListInput {
+	return ListInput{Year: 2026, Month: 10}
+}
+
+func TestService_List_MissingYear(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	_, err := svc.List(context.Background(), "user-1", ListInput{Month: 10})
+	require.Error(t, err)
+	var valErr *ValidationError
+	require.ErrorAs(t, err, &valErr)
+	assert.Equal(t, "year/month", valErr.Field)
+}
+
+func TestService_List_MissingMonth(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	_, err := svc.List(context.Background(), "user-1", ListInput{Year: 2026})
+	require.Error(t, err)
+	var valErr *ValidationError
+	require.ErrorAs(t, err, &valErr)
+	assert.Equal(t, "year/month", valErr.Field)
+}
+
+func TestService_List_InvalidMonth(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	_, err := svc.List(context.Background(), "user-1", ListInput{Year: 2026, Month: 13})
+	require.Error(t, err)
+	var valErr *ValidationError
+	require.ErrorAs(t, err, &valErr)
+	assert.Equal(t, "month", valErr.Field)
+}
+
+func TestService_List_InvalidDirection(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	dir := "sideways"
+	_, err := svc.List(context.Background(), "user-1", ListInput{Year: 2026, Month: 10, Direction: &dir})
+	require.Error(t, err)
+	var valErr *ValidationError
+	require.ErrorAs(t, err, &valErr)
+	assert.Equal(t, "direction", valErr.Field)
+}
+
+func TestService_List_OtherUserNotInCouple(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		sameCoupleFn: func(_ context.Context, _, _ string) (bool, error) { return false, nil },
+	}}
+	other := "user-2"
+	input := listInput()
+	input.UserID = &other
+	_, err := svc.List(context.Background(), "user-1", input)
+	assert.ErrorIs(t, err, ErrForbidden)
+}
+
+func TestService_List_OtherUserInCouple(t *testing.T) {
+	tx := Transaction{ID: "tx-partner"}
+	svc := &Service{repo: &mockRepository{
+		sameCoupleFn: func(_ context.Context, _, _ string) (bool, error) { return true, nil },
+		listFn: func(_ context.Context, userID string, _ *ListInput) ([]Transaction, error) {
+			assert.Equal(t, "user-2", userID)
+			return []Transaction{tx}, nil
+		},
+	}}
+	other := "user-2"
+	input := listInput()
+	input.UserID = &other
+	txs, err := svc.List(context.Background(), "user-1", input)
+	require.NoError(t, err)
+	require.Len(t, txs, 1)
+	assert.Equal(t, "tx-partner", txs[0].ID)
+}
+
+func TestService_List_SameUserNoCoupleLookup(t *testing.T) {
+	coupleCalled := false
+	svc := &Service{repo: &mockRepository{
+		sameCoupleFn: func(_ context.Context, _, _ string) (bool, error) {
+			coupleCalled = true
+			return false, nil
+		},
+	}}
+	self := "user-1"
+	input := listInput()
+	input.UserID = &self
+	_, err := svc.List(context.Background(), "user-1", input)
+	require.NoError(t, err)
+	assert.False(t, coupleCalled, "sameCouple must not be called when user_id == caller")
+}
+
+func TestService_List_Success(t *testing.T) {
+	expected := []Transaction{{ID: "tx-1"}, {ID: "tx-2"}}
+	svc := &Service{repo: &mockRepository{
+		listFn: func(_ context.Context, _ string, _ *ListInput) ([]Transaction, error) {
+			return expected, nil
+		},
+	}}
+	txs, err := svc.List(context.Background(), "user-1", listInput())
+	require.NoError(t, err)
+	assert.Equal(t, expected, txs)
+}
+
+func TestService_List_RepoError(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		listFn: func(_ context.Context, _ string, _ *ListInput) ([]Transaction, error) {
+			return nil, errors.New("db error")
+		},
+	}}
+	_, err := svc.List(context.Background(), "user-1", listInput())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
+}
+
+func TestService_List_SameCoupleLookupError(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		sameCoupleFn: func(_ context.Context, _, _ string) (bool, error) {
+			return false, errors.New("db error")
+		},
+	}}
+	other := "user-2"
+	input := listInput()
+	input.UserID = &other
+	_, err := svc.List(context.Background(), "user-1", input)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
+}

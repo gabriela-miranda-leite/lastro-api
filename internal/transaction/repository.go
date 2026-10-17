@@ -80,6 +80,79 @@ func (r *Repository) userHasCouple(ctx context.Context, userID string) (bool, er
 	return coupleID.Valid, nil
 }
 
+func (r *Repository) sameCouple(ctx context.Context, userIDA, userIDB string) (bool, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM users u1
+		   JOIN users u2 ON u2.couple_id = u1.couple_id
+		  WHERE u1.id = $1 AND u2.id = $2
+		    AND u1.couple_id IS NOT NULL`,
+		userIDA, userIDB,
+	).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("transaction.repository.sameCouple: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (r *Repository) list(ctx context.Context, userID string, input *ListInput) ([]Transaction, error) {
+	args := []interface{}{userID, input.Year, input.Month}
+	idx := 4
+
+	filter := ""
+	if input.CategoryID != nil {
+		filter += fmt.Sprintf(" AND t.category_id = $%d", idx)
+		args = append(args, *input.CategoryID)
+		idx++
+	}
+	if input.Direction != nil {
+		filter += fmt.Sprintf(" AND t.direction = $%d", idx)
+		args = append(args, *input.Direction)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT t.id, t.client_id, t.user_id, t.category_id, t.amount::text,
+		       t.direction, t.description, t.is_shared, t.date::text,
+		       t.created_at, t.updated_at
+		  FROM transactions t
+		 WHERE t.user_id = $1
+		   AND EXTRACT(YEAR  FROM t.date) = $2
+		   AND EXTRACT(MONTH FROM t.date) = $3
+		   AND t.deleted_at IS NULL
+		%s
+		 ORDER BY t.date DESC, t.created_at DESC`, filter)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("transaction.repository.list: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only query
+
+	var txs []Transaction
+	for rows.Next() {
+		var t Transaction
+		var categoryID, description sql.NullString
+		if err := rows.Scan(
+			&t.ID, &t.ClientID, &t.UserID, &categoryID, &t.Amount,
+			&t.Direction, &description, &t.IsShared, &t.Date,
+			&t.CreatedAt, &t.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("transaction.repository.list: %w", err)
+		}
+		if categoryID.Valid {
+			t.CategoryID = &categoryID.String
+		}
+		if description.Valid {
+			t.Description = &description.String
+		}
+		txs = append(txs, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("transaction.repository.list: %w", err)
+	}
+	return txs, nil
+}
+
 func (r *Repository) insert(ctx context.Context, userID string, input *CreateInput) (Transaction, error) {
 	var t Transaction
 	var categoryID sql.NullString
