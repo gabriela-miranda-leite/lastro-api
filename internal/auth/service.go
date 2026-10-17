@@ -20,7 +20,7 @@ var (
 
 // Service contains business logic for the auth domain.
 type Service struct {
-	repo      *Repository
+	repo      repository
 	jwtSecret []byte
 }
 
