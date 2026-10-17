@@ -3,6 +3,7 @@ package transaction
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 )
 
@@ -286,4 +287,44 @@ func (r *Repository) insert(ctx context.Context, userID string, input *CreateInp
 		t.Description = &description.String
 	}
 	return t, nil
+}
+
+func (r *Repository) softDelete(ctx context.Context, tx *Transaction, deletedByUserID string) error {
+	dbTx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("transaction.repository.softDelete: %w", err)
+	}
+	defer dbTx.Rollback() //nolint:errcheck // rollback is a no-op after commit
+
+	_, err = dbTx.ExecContext(ctx,
+		`UPDATE transactions SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`,
+		tx.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("transaction.repository.softDelete: %w", err)
+	}
+
+	metadata, err := json.Marshal(map[string]interface{}{
+		"amount":      tx.Amount,
+		"description": tx.Description,
+		"date":        tx.Date,
+		"category_id": tx.CategoryID,
+	})
+	if err != nil {
+		return fmt.Errorf("transaction.repository.softDelete: %w", err)
+	}
+
+	_, err = dbTx.ExecContext(ctx,
+		`INSERT INTO audit_log (user_id, action, entity, entity_id, metadata)
+		 VALUES ($1, 'delete', 'transaction', $2, $3)`,
+		deletedByUserID, tx.ID, metadata,
+	)
+	if err != nil {
+		return fmt.Errorf("transaction.repository.softDelete: %w", err)
+	}
+
+	if err := dbTx.Commit(); err != nil {
+		return fmt.Errorf("transaction.repository.softDelete: %w", err)
+	}
+	return nil
 }

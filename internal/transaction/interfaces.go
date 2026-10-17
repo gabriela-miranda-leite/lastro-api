@@ -13,4 +13,5 @@ type repository interface {
 	list(ctx context.Context, userID string, input *ListInput) ([]Transaction, error)
 	findByID(ctx context.Context, id string) (Transaction, error)
 	update(ctx context.Context, id, userID string, input *UpdateInput) (Transaction, error)
+	softDelete(ctx context.Context, tx *Transaction, deletedByUserID string) error
 }

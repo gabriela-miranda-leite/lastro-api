@@ -484,3 +484,67 @@ func TestService_Update_IsSharedToggle(t *testing.T) {
 	require.NotNil(t, capturedInput.IsShared)
 	assert.True(t, *capturedInput.IsShared)
 }
+
+// --- Delete ---
+
+func TestService_Delete_NotFound(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	err := svc.Delete(context.Background(), "user-1", "tx-999")
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_Delete_Forbidden(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Transaction, error) {
+			return Transaction{ID: "tx-1", UserID: "other-user"}, nil
+		},
+	}}
+	err := svc.Delete(context.Background(), "user-1", "tx-1")
+	assert.ErrorIs(t, err, ErrForbidden)
+}
+
+func TestService_Delete_SoftDeleteError(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Transaction, error) {
+			return Transaction{ID: "tx-1", UserID: "user-1"}, nil
+		},
+		softDeleteFn: func(_ context.Context, _ *Transaction, _ string) error {
+			return errors.New("db error")
+		},
+	}}
+	err := svc.Delete(context.Background(), "user-1", "tx-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
+}
+
+func TestService_Delete_Success(t *testing.T) {
+	var capturedTx *Transaction
+	var capturedCaller string
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Transaction, error) {
+			return Transaction{ID: "tx-1", UserID: "user-1", Amount: "50.00", Date: "2026-10-01"}, nil
+		},
+		softDeleteFn: func(_ context.Context, tx *Transaction, callerID string) error {
+			capturedTx = tx
+			capturedCaller = callerID
+			return nil
+		},
+	}}
+	err := svc.Delete(context.Background(), "user-1", "tx-1")
+	require.NoError(t, err)
+	require.NotNil(t, capturedTx)
+	assert.Equal(t, "tx-1", capturedTx.ID)
+	assert.Equal(t, "50.00", capturedTx.Amount)
+	assert.Equal(t, "user-1", capturedCaller)
+}
+
+func TestService_Delete_FindByIDError(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Transaction, error) {
+			return Transaction{}, errors.New("db error")
+		},
+	}}
+	err := svc.Delete(context.Background(), "user-1", "tx-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
+}
