@@ -153,6 +153,104 @@ func (r *Repository) list(ctx context.Context, userID string, input *ListInput) 
 	return txs, nil
 }
 
+func (r *Repository) findByID(ctx context.Context, id string) (Transaction, error) {
+	var t Transaction
+	var categoryID, description sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, client_id, user_id, category_id, amount::text, direction,
+		        description, is_shared, date::text, created_at, updated_at
+		   FROM transactions
+		  WHERE id = $1 AND deleted_at IS NULL`,
+		id,
+	).Scan(
+		&t.ID, &t.ClientID, &t.UserID, &categoryID, &t.Amount,
+		&t.Direction, &description, &t.IsShared, &t.Date, &t.CreatedAt, &t.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return Transaction{}, ErrNotFound
+	}
+	if err != nil {
+		return Transaction{}, fmt.Errorf("transaction.repository.findByID: %w", err)
+	}
+	if categoryID.Valid {
+		t.CategoryID = &categoryID.String
+	}
+	if description.Valid {
+		t.Description = &description.String
+	}
+	return t, nil
+}
+
+func (r *Repository) update(ctx context.Context, id, _ string, input *UpdateInput) (Transaction, error) {
+	sets := []string{"updated_at = now()"}
+	args := []interface{}{}
+	idx := 1
+
+	if input.Amount != nil {
+		sets = append(sets, fmt.Sprintf("amount = $%d", idx))
+		args = append(args, *input.Amount)
+		idx++
+	}
+	if input.CategoryID != nil {
+		sets = append(sets, fmt.Sprintf("category_id = $%d", idx))
+		args = append(args, *input.CategoryID)
+		idx++
+	}
+	if input.Description != nil {
+		sets = append(sets, fmt.Sprintf("description = $%d", idx))
+		args = append(args, *input.Description)
+		idx++
+	}
+	if input.IsShared != nil {
+		sets = append(sets, fmt.Sprintf("is_shared = $%d", idx))
+		args = append(args, *input.IsShared)
+		idx++
+	}
+	if input.Date != nil {
+		sets = append(sets, fmt.Sprintf("date = $%d::date", idx))
+		args = append(args, *input.Date)
+		idx++
+	}
+
+	args = append(args, id)
+	query := fmt.Sprintf(`UPDATE transactions SET %s
+		  WHERE id = $%d AND deleted_at IS NULL
+		  RETURNING id, client_id, user_id, category_id, amount::text, direction,
+		            description, is_shared, date::text, created_at, updated_at`,
+		joinSets(sets), idx)
+
+	var t Transaction
+	var categoryID, description sql.NullString
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(
+		&t.ID, &t.ClientID, &t.UserID, &categoryID, &t.Amount,
+		&t.Direction, &description, &t.IsShared, &t.Date, &t.CreatedAt, &t.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return Transaction{}, ErrNotFound
+	}
+	if err != nil {
+		return Transaction{}, fmt.Errorf("transaction.repository.update: %w", err)
+	}
+	if categoryID.Valid {
+		t.CategoryID = &categoryID.String
+	}
+	if description.Valid {
+		t.Description = &description.String
+	}
+	return t, nil
+}
+
+func joinSets(sets []string) string {
+	result := ""
+	for i, s := range sets {
+		if i > 0 {
+			result += ", "
+		}
+		result += s
+	}
+	return result
+}
+
 func (r *Repository) insert(ctx context.Context, userID string, input *CreateInput) (Transaction, error) {
 	var t Transaction
 	var categoryID sql.NullString

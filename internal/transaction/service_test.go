@@ -377,3 +377,110 @@ func TestService_List_SameCoupleLookupError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "db error")
 }
+
+// --- Update ---
+
+func fptr(f float64) *float64 { return &f }
+func bptr(b bool) *bool       { return &b }
+
+func TestService_Update_NotFound(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	_, err := svc.Update(context.Background(), "user-1", "tx-999", UpdateInput{})
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_Update_Forbidden(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Transaction, error) {
+			return Transaction{ID: "tx-1", UserID: "other-user"}, nil
+		},
+	}}
+	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{})
+	assert.ErrorIs(t, err, ErrForbidden)
+}
+
+func TestService_Update_AmountZero(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: fptr(0)})
+	var valErr *ValidationError
+	require.ErrorAs(t, err, &valErr)
+	assert.Equal(t, "amount", valErr.Field)
+}
+
+func TestService_Update_AmountNegative(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: fptr(-5)})
+	var valErr *ValidationError
+	require.ErrorAs(t, err, &valErr)
+	assert.Equal(t, "amount", valErr.Field)
+}
+
+func TestService_Update_InvalidDate(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	d := "31/10/2026"
+	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Date: &d})
+	var valErr *ValidationError
+	require.ErrorAs(t, err, &valErr)
+	assert.Equal(t, "date", valErr.Field)
+}
+
+func TestService_Update_CategoryForbidden(t *testing.T) {
+	cat := "cat-1"
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Transaction, error) {
+			return Transaction{ID: "tx-1", UserID: "user-1"}, nil
+		},
+		categoryOwnerFn: func(_ context.Context, _ string) (string, bool, error) {
+			return "other-user", true, nil
+		},
+	}}
+	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{CategoryID: &cat})
+	assert.ErrorIs(t, err, ErrCategoryForbidden)
+}
+
+func TestService_Update_Success(t *testing.T) {
+	updated := Transaction{ID: "tx-1", UserID: "user-1", Amount: "200.00"}
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Transaction, error) {
+			return Transaction{ID: "tx-1", UserID: "user-1"}, nil
+		},
+		updateFn: func(_ context.Context, _, _ string, _ *UpdateInput) (Transaction, error) {
+			return updated, nil
+		},
+	}}
+	tx, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: fptr(200)})
+	require.NoError(t, err)
+	assert.Equal(t, "200.00", tx.Amount)
+}
+
+func TestService_Update_RepoUpdateError(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Transaction, error) {
+			return Transaction{ID: "tx-1", UserID: "user-1"}, nil
+		},
+		updateFn: func(_ context.Context, _, _ string, _ *UpdateInput) (Transaction, error) {
+			return Transaction{}, errors.New("db error")
+		},
+	}}
+	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: fptr(50)})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
+}
+
+func TestService_Update_IsSharedToggle(t *testing.T) {
+	var capturedInput *UpdateInput
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Transaction, error) {
+			return Transaction{ID: "tx-1", UserID: "user-1", IsShared: false}, nil
+		},
+		updateFn: func(_ context.Context, _, _ string, input *UpdateInput) (Transaction, error) {
+			capturedInput = input
+			return Transaction{ID: "tx-1", IsShared: true}, nil
+		},
+	}}
+	tx, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{IsShared: bptr(true)})
+	require.NoError(t, err)
+	assert.True(t, tx.IsShared)
+	require.NotNil(t, capturedInput.IsShared)
+	assert.True(t, *capturedInput.IsShared)
+}

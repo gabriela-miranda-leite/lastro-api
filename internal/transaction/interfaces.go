@@ -11,4 +11,6 @@ type repository interface {
 	// sameCouple returns true when both users belong to the same couple.
 	sameCouple(ctx context.Context, userIDA, userIDB string) (bool, error)
 	list(ctx context.Context, userID string, input *ListInput) ([]Transaction, error)
+	findByID(ctx context.Context, id string) (Transaction, error)
+	update(ctx context.Context, id, userID string, input *UpdateInput) (Transaction, error)
 }

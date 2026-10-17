@@ -40,6 +40,15 @@ type Transaction struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// UpdateInput holds the optional fields for PUT /transactions/:id.
+type UpdateInput struct {
+	Amount      *float64 `json:"amount"`
+	CategoryID  *string  `json:"category_id"`
+	Description *string  `json:"description"`
+	IsShared    *bool    `json:"is_shared"`
+	Date        *string  `json:"date"`
+}
+
 // ListInput holds the query params for GET /transactions.
 type ListInput struct {
 	Year       int

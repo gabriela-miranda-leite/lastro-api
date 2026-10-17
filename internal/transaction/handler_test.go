@@ -245,6 +245,10 @@ func (m *mockSvc) List(_ context.Context, _ string, _ transaction.ListInput) ([]
 	return nil, m.err
 }
 
+func (m *mockSvc) Update(_ context.Context, _, _ string, _ transaction.UpdateInput) (transaction.Transaction, error) {
+	return transaction.Transaction{}, m.err
+}
+
 // --- GET /transactions ---
 
 func TestIntegration_ListTransactions(t *testing.T) {
@@ -363,6 +367,94 @@ func TestHandler_List_InternalError(t *testing.T) {
 
 	httpReq := httptest.NewRequestWithContext(context.Background(),
 		http.MethodGet, "/v1/transactions?year=2026&month=10", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httpReq)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "internal server error")
+}
+
+// --- PUT /transactions/:id ---
+
+func TestIntegration_UpdateTransaction(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	t.Run("owner can update amount and date", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "upd_ok@test.com", "Senha123")
+
+		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655442001","amount":100,"direction":"out","date":"2026-10-01"}`,
+			token)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		wUpd := req(t, r, http.MethodPut, "/v1/transactions/"+id,
+			`{"amount":250.75,"date":"2026-10-15"}`, token)
+		assert.Equal(t, http.StatusOK, wUpd.Code)
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(wUpd.Body.Bytes(), &resp))
+		assert.Equal(t, "250.75", resp["amount"])
+		assert.Equal(t, "2026-10-15", resp["date"])
+	})
+
+	t.Run("non-owner gets 403", func(t *testing.T) {
+		tokenA, _ := registerAndLogin(t, r, "upd_ownerA@test.com", "Senha123")
+		tokenB, _ := registerAndLogin(t, r, "upd_ownerB@test.com", "Senha123")
+
+		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655442002","amount":50,"direction":"in","date":"2026-10-01"}`,
+			tokenA)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := req(t, r, http.MethodPut, "/v1/transactions/"+id, `{"amount":99}`, tokenB)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("unknown id returns 404", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "upd_404@test.com", "Senha123")
+		w := req(t, r, http.MethodPut, "/v1/transactions/00000000-0000-0000-0000-000000000000",
+			`{"amount":10}`, token)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("invalid amount returns 422", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "upd_amt@test.com", "Senha123")
+
+		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655442003","amount":30,"direction":"out","date":"2026-10-01"}`,
+			token)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := req(t, r, http.MethodPut, "/v1/transactions/"+id, `{"amount":-1}`, token)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
+
+	t.Run("without token returns 401", func(t *testing.T) {
+		w := req(t, r, http.MethodPut, "/v1/transactions/some-id", `{"amount":10}`, "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+func TestHandler_Update_InternalError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("user_id", "user-test"); c.Next() })
+	h := transaction.NewHandlerWithService(&mockSvc{err: fmt.Errorf("unexpected")})
+	h.RegisterRoutes(r.Group("/v1"))
+
+	httpReq := httptest.NewRequestWithContext(context.Background(),
+		http.MethodPut, "/v1/transactions/some-id",
+		strings.NewReader(`{"amount":10}`))
+	httpReq.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httpReq)
 
