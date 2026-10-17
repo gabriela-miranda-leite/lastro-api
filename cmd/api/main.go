@@ -14,10 +14,10 @@ import (
 	"github.com/gabriela-miranda-leite/lastro-api/internal/auth"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/couple"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/db"
-	"github.com/gabriela-miranda-leite/lastro-api/internal/transaction"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/health"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/middleware"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/purge"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/transaction"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/user"
 )
 
