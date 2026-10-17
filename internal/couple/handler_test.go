@@ -369,3 +369,86 @@ func TestIntegration_Unlink(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
+
+// --- Fluxo completo end-to-end ---
+
+func TestIntegration_CoupleFullFlow(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	// 1. Registrar dois usuários
+	tokenA, userA := registerAndLogin(t, r, "flow_a@test.com", "Senha123")
+	tokenB, userB := registerAndLogin(t, r, "flow_b@test.com", "Senha123")
+
+	// 2. A gera convite
+	wInvite := req(t, r, http.MethodPost, "/v1/couples/invite", "", tokenA)
+	require.Equal(t, http.StatusCreated, wInvite.Code)
+	var inv map[string]any
+	require.NoError(t, json.Unmarshal(wInvite.Body.Bytes(), &inv))
+	code := inv["code"].(string)
+	assert.Len(t, code, 6)
+
+	// antes do join: nenhum tem couple_id
+	var coupleA, coupleB sql.NullString
+	require.NoError(t, db.QueryRowContext(context.Background(),
+		`SELECT couple_id FROM users WHERE id = $1`, userA).Scan(&coupleA))
+	require.NoError(t, db.QueryRowContext(context.Background(),
+		`SELECT couple_id FROM users WHERE id = $1`, userB).Scan(&coupleB))
+	assert.False(t, coupleA.Valid, "A não deve ter couple_id antes do join")
+	assert.False(t, coupleB.Valid, "B não deve ter couple_id antes do join")
+
+	// 3. B aceita o convite
+	wJoin := req(t, r, http.MethodPost, "/v1/couples/join",
+		fmt.Sprintf(`{"code":%q}`, code), tokenB)
+	require.Equal(t, http.StatusOK, wJoin.Code)
+	var joinResp map[string]any
+	require.NoError(t, json.Unmarshal(wJoin.Body.Bytes(), &joinResp))
+	coupleID := joinResp["couple_id"].(string)
+	assert.NotEmpty(t, coupleID)
+
+	// após join: ambos têm o mesmo couple_id
+	require.NoError(t, db.QueryRowContext(context.Background(),
+		`SELECT couple_id FROM users WHERE id = $1`, userA).Scan(&coupleA))
+	require.NoError(t, db.QueryRowContext(context.Background(),
+		`SELECT couple_id FROM users WHERE id = $1`, userB).Scan(&coupleB))
+	assert.True(t, coupleA.Valid, "A deve ter couple_id após join")
+	assert.True(t, coupleB.Valid, "B deve ter couple_id após join")
+	assert.Equal(t, coupleID, coupleA.String)
+	assert.Equal(t, coupleID, coupleB.String)
+
+	// 4. código não pode ser reutilizado (já marcado como used)
+	wReuse := req(t, r, http.MethodPost, "/v1/couples/join",
+		fmt.Sprintf(`{"code":%q}`, code), tokenB)
+	assert.Equal(t, http.StatusGone, wReuse.Code)
+
+	// 5. B desvincula o casal
+	wUnlink := req(t, r, http.MethodDelete, "/v1/couples", "", tokenB)
+	assert.Equal(t, http.StatusNoContent, wUnlink.Code)
+
+	// após desvinculação: nenhum tem couple_id
+	require.NoError(t, db.QueryRowContext(context.Background(),
+		`SELECT couple_id FROM users WHERE id = $1`, userA).Scan(&coupleA))
+	require.NoError(t, db.QueryRowContext(context.Background(),
+		`SELECT couple_id FROM users WHERE id = $1`, userB).Scan(&coupleB))
+	assert.False(t, coupleA.Valid, "A não deve ter couple_id após unlink")
+	assert.False(t, coupleB.Valid, "B não deve ter couple_id após unlink")
+
+	// registro em couples permanece
+	var coupleExists bool
+	require.NoError(t, db.QueryRowContext(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM couples WHERE id = $1)`, coupleID).Scan(&coupleExists))
+	assert.True(t, coupleExists, "registro em couples deve ser preservado")
+
+	// dois audit_log registrados
+	var auditCount int
+	require.NoError(t, db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM audit_log
+		  WHERE user_id = ANY($1::uuid[]) AND action = 'unlink_couple'`,
+		fmt.Sprintf("{%s,%s}", userA, userB),
+	).Scan(&auditCount))
+	assert.Equal(t, 2, auditCount)
+
+	// 6. A não pode mais desvincular (já sem casal)
+	wUnlink2 := req(t, r, http.MethodDelete, "/v1/couples", "", tokenA)
+	assert.Equal(t, http.StatusNotFound, wUnlink2.Code)
+}

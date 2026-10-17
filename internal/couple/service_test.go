@@ -62,6 +62,43 @@ func TestService_Unlink(t *testing.T) {
 
 		assert.NoError(t, err)
 	})
+
+	t.Run("findPartnerID error propagates", func(t *testing.T) {
+		repo := &mockRepository{
+			findCoupleIDFn: func(_ context.Context, _ string) (string, error) {
+				return "couple-abc", nil
+			},
+			findPartnerIDFn: func(_ context.Context, _, _ string) (string, error) {
+				return "", errors.New("db error")
+			},
+		}
+		svc := &Service{repo: repo}
+
+		err := svc.Unlink(context.Background(), "user-1")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+	})
+
+	t.Run("unlink repo error propagates", func(t *testing.T) {
+		repo := &mockRepository{
+			findCoupleIDFn: func(_ context.Context, _ string) (string, error) {
+				return "couple-abc", nil
+			},
+			findPartnerIDFn: func(_ context.Context, _, _ string) (string, error) {
+				return "partner-1", nil
+			},
+			unlinkFn: func(_ context.Context, _, _, _ string) error {
+				return errors.New("tx error")
+			},
+		}
+		svc := &Service{repo: repo}
+
+		err := svc.Unlink(context.Background(), "user-1")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tx error")
+	})
 }
 
 func activeInvite(inviterID string) InviteRecord {
@@ -80,6 +117,20 @@ func TestService_Join(t *testing.T) {
 		_, err := svc.Join(context.Background(), "user-2", "XXXXXX")
 
 		assert.ErrorIs(t, err, ErrInviteNotFound)
+	})
+
+	t.Run("findInviteByCode db error propagates", func(t *testing.T) {
+		repo := &mockRepository{
+			findInviteByCodeFn: func(_ context.Context, _ string) (InviteRecord, error) {
+				return InviteRecord{}, errors.New("db error")
+			},
+		}
+		svc := &Service{repo: repo}
+
+		_, err := svc.Join(context.Background(), "user-2", "ABCDEF")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
 	})
 
 	t.Run("expired invite returns ErrInviteExpired", func(t *testing.T) {
@@ -147,6 +198,40 @@ func TestService_Join(t *testing.T) {
 		assert.ErrorIs(t, err, ErrAlreadyInCouple)
 	})
 
+	t.Run("isInCouple db error propagates", func(t *testing.T) {
+		repo := &mockRepository{
+			findInviteByCodeFn: func(_ context.Context, _ string) (InviteRecord, error) {
+				return activeInvite("user-1"), nil
+			},
+			isInCoupleFn: func(_ context.Context, _ string) (bool, error) {
+				return false, errors.New("db error")
+			},
+		}
+		svc := &Service{repo: repo}
+
+		_, err := svc.Join(context.Background(), "user-2", "ABCDEF")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+	})
+
+	t.Run("joinCouple repo error propagates", func(t *testing.T) {
+		repo := &mockRepository{
+			findInviteByCodeFn: func(_ context.Context, _ string) (InviteRecord, error) {
+				return activeInvite("user-1"), nil
+			},
+			joinCoupleFn: func(_ context.Context, _, _, _ string) (JoinResponse, error) {
+				return JoinResponse{}, errors.New("tx error")
+			},
+		}
+		svc := &Service{repo: repo}
+
+		_, err := svc.Join(context.Background(), "user-2", "ABCDEF")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tx error")
+	})
+
 	t.Run("success calls joinCouple and returns couple_id", func(t *testing.T) {
 		joinCalled := false
 		repo := &mockRepository{
@@ -166,6 +251,25 @@ func TestService_Join(t *testing.T) {
 		assert.Equal(t, "couple-abc", resp.CoupleID)
 		assert.True(t, joinCalled)
 	})
+
+	t.Run("joinCouple receives correct inviteID from found record", func(t *testing.T) {
+		var gotInviteID string
+		repo := &mockRepository{
+			findInviteByCodeFn: func(_ context.Context, _ string) (InviteRecord, error) {
+				return InviteRecord{ID: "inv-xyz", InviterID: "user-1", ExpiresAt: time.Now().Add(time.Hour)}, nil
+			},
+			joinCoupleFn: func(_ context.Context, inviteID, _, _ string) (JoinResponse, error) {
+				gotInviteID = inviteID
+				return JoinResponse{CoupleID: "couple-abc"}, nil
+			},
+		}
+		svc := &Service{repo: repo}
+
+		_, err := svc.Join(context.Background(), "user-2", "ABCDEF")
+
+		require.NoError(t, err)
+		assert.Equal(t, "inv-xyz", gotInviteID)
+	})
 }
 
 func TestService_Invite(t *testing.T) {
@@ -180,6 +284,54 @@ func TestService_Invite(t *testing.T) {
 		_, err := svc.Invite(context.Background(), "user-1")
 
 		assert.ErrorIs(t, err, ErrAlreadyInCouple)
+	})
+
+	t.Run("isInCouple db error propagates", func(t *testing.T) {
+		repo := &mockRepository{
+			isInCoupleFn: func(_ context.Context, _ string) (bool, error) {
+				return false, errors.New("db error")
+			},
+		}
+		svc := &Service{repo: repo}
+
+		_, err := svc.Invite(context.Background(), "user-1")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+	})
+
+	t.Run("createInvite error propagates", func(t *testing.T) {
+		repo := &mockRepository{
+			isInCoupleFn: func(_ context.Context, _ string) (bool, error) {
+				return false, nil
+			},
+			createInviteFn: func(_ context.Context, _, _ string) (InviteResponse, error) {
+				return InviteResponse{}, errors.New("insert failed")
+			},
+		}
+		svc := &Service{repo: repo}
+
+		_, err := svc.Invite(context.Background(), "user-1")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "insert failed")
+	})
+
+	t.Run("exhausting max retries on code collision returns error", func(t *testing.T) {
+		repo := &mockRepository{
+			isInCoupleFn: func(_ context.Context, _ string) (bool, error) {
+				return false, nil
+			},
+			codeExistsFn: func(_ context.Context, _ string) (bool, error) {
+				return true, nil // always collides
+			},
+		}
+		svc := &Service{repo: repo}
+
+		_, err := svc.Invite(context.Background(), "user-1")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to generate unique code")
 	})
 
 	t.Run("success returns invite with 6-char alphanumeric code", func(t *testing.T) {
