@@ -12,6 +12,7 @@ import (
 type transactionService interface {
 	Create(ctx context.Context, userID string, input *CreateInput) (Transaction, bool, error)
 	List(ctx context.Context, callerID string, input ListInput) ([]Transaction, error)
+	Update(ctx context.Context, userID, id string, input UpdateInput) (Transaction, error)
 }
 
 // Handler handles HTTP requests for the transaction domain.
@@ -33,6 +34,7 @@ func NewHandlerWithService(svc transactionService) *Handler {
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/transactions", h.create)
 	rg.GET("/transactions", h.list)
+	rg.PUT("/transactions/:id", h.update)
 }
 
 func (h *Handler) create(c *gin.Context) {
@@ -116,4 +118,33 @@ func (h *Handler) list(c *gin.Context) {
 		txs = []Transaction{}
 	}
 	c.JSON(http.StatusOK, txs)
+}
+
+func (h *Handler) update(c *gin.Context) {
+	id := c.Param("id")
+	var input UpdateInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	tx, err := h.service.Update(c.Request.Context(), userID, id, input)
+	if err != nil {
+		var valErr *ValidationError
+		switch {
+		case errors.As(err, &valErr):
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": valErr.Message, "field": valErr.Field})
+		case errors.Is(err, ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "transaction not found"})
+		case errors.Is(err, ErrForbidden):
+			c.JSON(http.StatusForbidden, gin.H{"error": "not the owner of this transaction"})
+		case errors.Is(err, ErrCategoryForbidden):
+			c.JSON(http.StatusForbidden, gin.H{"error": "category belongs to another user"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, tx)
 }

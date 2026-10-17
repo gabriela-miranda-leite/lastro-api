@@ -58,6 +58,42 @@ func (s *Service) Create(ctx context.Context, userID string, input *CreateInput)
 	return tx, false, nil
 }
 
+// Update edits an existing transaction. Only the owner may edit.
+func (s *Service) Update(ctx context.Context, userID, id string, input UpdateInput) (Transaction, error) {
+	if input.Amount != nil && *input.Amount <= 0 {
+		return Transaction{}, &ValidationError{Field: "amount", Message: "must be greater than zero"}
+	}
+	if input.Date != nil {
+		if _, err := time.Parse("2006-01-02", *input.Date); err != nil {
+			return Transaction{}, &ValidationError{Field: "date", Message: "must be in YYYY-MM-DD format"}
+		}
+	}
+
+	tx, err := s.repo.findByID(ctx, id)
+	if err != nil {
+		return Transaction{}, fmt.Errorf("transaction.service.Update: %w", err)
+	}
+	if tx.UserID != userID {
+		return Transaction{}, ErrForbidden
+	}
+
+	if input.CategoryID != nil {
+		ownerID, owned, err := s.repo.categoryOwner(ctx, *input.CategoryID)
+		if err != nil {
+			return Transaction{}, fmt.Errorf("transaction.service.Update: %w", err)
+		}
+		if owned && ownerID != userID {
+			return Transaction{}, ErrCategoryForbidden
+		}
+	}
+
+	updated, err := s.repo.update(ctx, id, userID, &input)
+	if err != nil {
+		return Transaction{}, fmt.Errorf("transaction.service.Update: %w", err)
+	}
+	return updated, nil
+}
+
 // List returns transactions for the given month, applying filters.
 // If input.UserID is set and differs from the caller, both must be in the same couple.
 func (s *Service) List(ctx context.Context, callerID string, input ListInput) ([]Transaction, error) {
