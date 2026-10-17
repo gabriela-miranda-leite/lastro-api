@@ -171,3 +171,29 @@ func (r *Repository) delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+func (r *Repository) upsertOverride(ctx context.Context, recurringID string, input *OverrideInput) (RecurringOverride, error) {
+	var amountArg interface{}
+	if input.AmountOverride != nil {
+		amountArg = *input.AmountOverride
+	}
+	row := r.db.QueryRowContext(ctx,
+		`INSERT INTO recurring_overrides (recurring_id, year, month, amount_override, active)
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (recurring_id, year, month) DO UPDATE
+		   SET amount_override = EXCLUDED.amount_override,
+		       active          = EXCLUDED.active
+		 RETURNING id, recurring_id, year, month, amount_override::text, active, created_at`,
+		recurringID, input.Year, input.Month, amountArg, input.Active,
+	)
+	var o RecurringOverride
+	var amountOverride sql.NullString
+	err := row.Scan(&o.ID, &o.RecurringID, &o.Year, &o.Month, &amountOverride, &o.Active, &o.CreatedAt)
+	if err != nil {
+		return RecurringOverride{}, fmt.Errorf("recurring.repository.upsertOverride: %w", err)
+	}
+	if amountOverride.Valid {
+		o.AmountOverride = &amountOverride.String
+	}
+	return o, nil
+}

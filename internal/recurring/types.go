@@ -42,6 +42,25 @@ type UpdateInput struct {
 	Active     *bool    `json:"active"`
 }
 
+// RecurringOverride is a monthly override for a recurring expense.
+type RecurringOverride struct {
+	ID             string    `json:"id"`
+	RecurringID    string    `json:"recurring_id"`
+	Year           int       `json:"year"`
+	Month          int       `json:"month"`
+	AmountOverride *string   `json:"amount_override"` // NUMERIC returned as string, nil means use original
+	Active         bool      `json:"active"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// OverrideInput is the request body for PUT /recurring/:id/override.
+type OverrideInput struct {
+	Year           int      `json:"year"  binding:"required"`
+	Month          int      `json:"month" binding:"required"`
+	AmountOverride *float64 `json:"amount_override"`
+	Active         bool     `json:"active"`
+}
+
 // ValidationError carries a field-level validation failure.
 type ValidationError struct {
 	Field   string

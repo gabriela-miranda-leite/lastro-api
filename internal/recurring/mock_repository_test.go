@@ -3,11 +3,12 @@ package recurring
 import "context"
 
 type mockRepository struct {
-	listFn     func(ctx context.Context, userID string) ([]Recurring, error)
-	findByIDFn func(ctx context.Context, id string) (Recurring, error)
-	insertFn   func(ctx context.Context, userID string, input *CreateInput) (Recurring, error)
-	updateFn   func(ctx context.Context, id string, input *UpdateInput) (Recurring, error)
-	deleteFn   func(ctx context.Context, id string) error
+	listFn           func(ctx context.Context, userID string) ([]Recurring, error)
+	findByIDFn       func(ctx context.Context, id string) (Recurring, error)
+	insertFn         func(ctx context.Context, userID string, input *CreateInput) (Recurring, error)
+	updateFn         func(ctx context.Context, id string, input *UpdateInput) (Recurring, error)
+	deleteFn         func(ctx context.Context, id string) error
+	upsertOverrideFn func(ctx context.Context, recurringID string, input *OverrideInput) (RecurringOverride, error)
 }
 
 func (m *mockRepository) list(ctx context.Context, userID string) ([]Recurring, error) {
@@ -43,4 +44,11 @@ func (m *mockRepository) delete(ctx context.Context, id string) error {
 		return m.deleteFn(ctx, id)
 	}
 	return nil
+}
+
+func (m *mockRepository) upsertOverride(ctx context.Context, recurringID string, input *OverrideInput) (RecurringOverride, error) {
+	if m.upsertOverrideFn != nil {
+		return m.upsertOverrideFn(ctx, recurringID, input)
+	}
+	return RecurringOverride{ID: "ov-1", RecurringID: recurringID, Year: input.Year, Month: input.Month, Active: input.Active}, nil
 }

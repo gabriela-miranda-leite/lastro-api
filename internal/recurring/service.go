@@ -70,6 +70,26 @@ func (s *Service) Delete(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+// UpsertOverride creates or updates a monthly override for a recurring expense.
+// Only the owner may create/update an override.
+func (s *Service) UpsertOverride(ctx context.Context, userID, recurringID string, input OverrideInput) (RecurringOverride, error) {
+	if err := validateOverride(&input); err != nil {
+		return RecurringOverride{}, err
+	}
+	existing, err := s.repo.findByID(ctx, recurringID)
+	if err != nil {
+		return RecurringOverride{}, fmt.Errorf("recurring.service.UpsertOverride: %w", err)
+	}
+	if existing.UserID != userID {
+		return RecurringOverride{}, ErrForbidden
+	}
+	o, err := s.repo.upsertOverride(ctx, recurringID, &input)
+	if err != nil {
+		return RecurringOverride{}, fmt.Errorf("recurring.service.UpsertOverride: %w", err)
+	}
+	return o, nil
+}
+
 func validateCreate(input *CreateInput) error {
 	if input.Amount <= 0 {
 		return &ValidationError{Field: "amount", Message: "must be greater than zero"}
@@ -86,6 +106,19 @@ func validateUpdate(input *UpdateInput) error {
 	}
 	if input.DueDay != nil && (*input.DueDay < 1 || *input.DueDay > 31) {
 		return &ValidationError{Field: "due_day", Message: "must be between 1 and 31"}
+	}
+	return nil
+}
+
+func validateOverride(input *OverrideInput) error {
+	if input.Year <= 0 {
+		return &ValidationError{Field: "year", Message: "must be greater than zero"}
+	}
+	if input.Month < 1 || input.Month > 12 {
+		return &ValidationError{Field: "month", Message: "must be between 1 and 12"}
+	}
+	if input.AmountOverride != nil && *input.AmountOverride <= 0 {
+		return &ValidationError{Field: "amount_override", Message: "must be greater than zero"}
 	}
 	return nil
 }

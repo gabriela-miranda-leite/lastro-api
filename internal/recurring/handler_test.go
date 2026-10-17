@@ -203,6 +203,96 @@ func TestIntegration_Recurring(t *testing.T) {
 		w := doReq(t, r, http.MethodGet, "/v1/recurring", "", "")
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
+
+	t.Run("PUT override creates override", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "rec_ov_create@test.com", "Senha123")
+		wCreate := doReq(t, r, http.MethodPost, "/v1/recurring", `{"name":"Condomínio","amount":500,"due_day":10}`, token)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		body := `{"year":2026,"month":10,"amount_override":600,"active":true}`
+		w := doReq(t, r, http.MethodPut, "/v1/recurring/"+id+"/override", body, token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Equal(t, float64(2026), resp["year"])
+		assert.Equal(t, float64(10), resp["month"])
+		assert.Equal(t, "600.00", resp["amount_override"])
+		assert.Equal(t, true, resp["active"])
+	})
+
+	t.Run("PUT override upserts on conflict", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "rec_ov_upsert@test.com", "Senha123")
+		wCreate := doReq(t, r, http.MethodPost, "/v1/recurring", `{"name":"Internet","amount":100,"due_day":5}`, token)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		doReq(t, r, http.MethodPut, "/v1/recurring/"+id+"/override",
+			`{"year":2026,"month":11,"amount_override":120,"active":true}`, token)
+
+		w := doReq(t, r, http.MethodPut, "/v1/recurring/"+id+"/override",
+			`{"year":2026,"month":11,"amount_override":150,"active":false}`, token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Equal(t, "150.00", resp["amount_override"])
+		assert.Equal(t, false, resp["active"])
+	})
+
+	t.Run("PUT override without amount_override skips generation", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "rec_ov_noamt@test.com", "Senha123")
+		wCreate := doReq(t, r, http.MethodPost, "/v1/recurring", `{"name":"Gym","amount":80,"due_day":1}`, token)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := doReq(t, r, http.MethodPut, "/v1/recurring/"+id+"/override",
+			`{"year":2026,"month":12,"active":false}`, token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Nil(t, resp["amount_override"])
+		assert.Equal(t, false, resp["active"])
+	})
+
+	t.Run("PUT override by non-owner returns 403", func(t *testing.T) {
+		tokenA, _ := registerAndLogin(t, r, "rec_ovA@test.com", "Senha123")
+		tokenB, _ := registerAndLogin(t, r, "rec_ovB@test.com", "Senha123")
+		wCreate := doReq(t, r, http.MethodPost, "/v1/recurring", `{"name":"Fixo","amount":200,"due_day":15}`, tokenA)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := doReq(t, r, http.MethodPut, "/v1/recurring/"+id+"/override",
+			`{"year":2026,"month":10,"active":false}`, tokenB)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("PUT override unknown recurring returns 404", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "rec_ov404@test.com", "Senha123")
+		w := doReq(t, r, http.MethodPut, "/v1/recurring/00000000-0000-0000-0000-000000000000/override",
+			`{"year":2026,"month":10,"active":false}`, token)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("PUT override invalid month returns 422", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "rec_ov422@test.com", "Senha123")
+		wCreate := doReq(t, r, http.MethodPost, "/v1/recurring", `{"name":"X","amount":10,"due_day":1}`, token)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := doReq(t, r, http.MethodPut, "/v1/recurring/"+id+"/override",
+			`{"year":2026,"month":13,"active":true}`, token)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
 }
 
 // --- Handler unit tests for 500 paths ---
@@ -219,6 +309,9 @@ func (m *mockSvc) Update(_ context.Context, _, _ string, _ recurring.UpdateInput
 	return recurring.Recurring{}, m.err
 }
 func (m *mockSvc) Delete(_ context.Context, _, _ string) error { return m.err }
+func (m *mockSvc) UpsertOverride(_ context.Context, _, _ string, _ recurring.OverrideInput) (recurring.RecurringOverride, error) {
+	return recurring.RecurringOverride{}, m.err
+}
 
 func TestHandler_List_InternalError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -271,6 +364,21 @@ func TestHandler_Delete_InternalError(t *testing.T) {
 	h.RegisterRoutes(r.Group("/v1"))
 
 	httpReq := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/v1/recurring/some-id", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httpReq)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHandler_UpsertOverride_InternalError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("user_id", "user-test"); c.Next() })
+	h := recurring.NewHandlerWithService(&mockSvc{err: fmt.Errorf("unexpected")})
+	h.RegisterRoutes(r.Group("/v1"))
+
+	httpReq := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/v1/recurring/some-id/override",
+		strings.NewReader(`{"year":2026,"month":10,"active":false}`))
+	httpReq.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httpReq)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
