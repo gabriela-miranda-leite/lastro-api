@@ -100,6 +100,50 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (AuthResponse, er
 	}, nil
 }
 
+func (s *Service) Refresh(ctx context.Context, rawToken string) (AuthResponse, error) {
+	sum := sha256.Sum256([]byte(rawToken))
+	tokenHash := hex.EncodeToString(sum[:])
+
+	tokenRow, err := s.repo.findRefreshToken(ctx, tokenHash)
+	if err != nil {
+		if errors.Is(err, ErrTokenRevoked) {
+			// reuse detected — revoke all sessions for this user
+			_ = s.repo.revokeAllUserTokens(ctx, tokenRow.UserID)
+			return AuthResponse{}, fmt.Errorf("auth.service.Refresh: %w", ErrInvalidCredentials)
+		}
+		return AuthResponse{}, fmt.Errorf("auth.service.Refresh: %w", err)
+	}
+
+	if err := s.repo.revokeRefreshToken(ctx, tokenRow.ID); err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Refresh: %w", err)
+	}
+
+	user, err := s.repo.findUserByID(ctx, tokenRow.UserID)
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Refresh: %w", err)
+	}
+
+	accessToken, err := s.generateAccessToken(user.ID)
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Refresh: %w", err)
+	}
+
+	rawRefresh, refreshHash, err := generateRefreshToken()
+	if err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Refresh: %w", err)
+	}
+
+	if err := s.repo.saveRefreshToken(ctx, user.ID, refreshHash); err != nil {
+		return AuthResponse{}, fmt.Errorf("auth.service.Refresh: %w", err)
+	}
+
+	return AuthResponse{
+		User:         UserResponse(user),
+		AccessToken:  accessToken,
+		RefreshToken: rawRefresh,
+	}, nil
+}
+
 func (s *Service) generateAccessToken(userID string) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": userID,
