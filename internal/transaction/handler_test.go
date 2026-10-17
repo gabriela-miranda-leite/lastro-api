@@ -1,0 +1,242 @@
+package transaction_test
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"hash/fnv"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/gabriela-miranda-leite/lastro-api/internal/auth"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/couple"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/middleware"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/testhelpers"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/transaction"
+)
+
+const testJWTSecret = "test-secret-key"
+
+func setupRouter(db *sql.DB) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+
+	authSvc := auth.NewService(auth.NewRepository(db), testJWTSecret)
+	authHandler := auth.NewHandler(authSvc)
+
+	v1 := r.Group("/v1")
+
+	authGroup := v1.Group("/auth")
+	authHandler.RegisterRoutes(authGroup)
+
+	protected := v1.Group("/")
+	protected.Use(middleware.Auth(db, testJWTSecret))
+	authHandler.RegisterProtectedRoutes(protected)
+
+	coupleHandler := couple.NewHandler(couple.NewService(couple.NewRepository(db)))
+	coupleHandler.RegisterRoutes(protected)
+
+	txHandler := transaction.NewHandler(transaction.NewService(transaction.NewRepository(db)))
+	txHandler.RegisterRoutes(protected)
+
+	return r
+}
+
+func subtestIP(t *testing.T) string {
+	t.Helper()
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(t.Name()))
+	n := h.Sum32()
+	return fmt.Sprintf("10.%d.%d.%d:9999", (n>>16)&0xff, (n>>8)&0xff, n&0xff)
+}
+
+func req(t *testing.T, r *gin.Engine, method, path, body, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	httpReq := httptest.NewRequestWithContext(context.Background(), method, path, strings.NewReader(body))
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.RemoteAddr = subtestIP(t)
+	if token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+token)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httpReq)
+	return w
+}
+
+func registerAndLogin(t *testing.T, r *gin.Engine, email, password string) (token, userID string) {
+	t.Helper()
+	body := fmt.Sprintf(`{"name":"Test","email":%q,"password":%q}`, email, password)
+	w := req(t, r, http.MethodPost, "/v1/auth/register", body, "")
+	require.Equal(t, http.StatusCreated, w.Code, "register: %s", w.Body)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	return resp["access_token"].(string), resp["user"].(map[string]any)["id"].(string)
+}
+
+// createCouple links two users and returns their tokens.
+func createCouple(t *testing.T, r *gin.Engine, emailA, emailB string) (tokenA, tokenB string) {
+	t.Helper()
+	tokenA, _ = registerAndLogin(t, r, emailA, "Senha123")
+	tokenB, _ = registerAndLogin(t, r, emailB, "Senha123")
+
+	wInv := req(t, r, http.MethodPost, "/v1/couples/invite", "", tokenA)
+	require.Equal(t, http.StatusCreated, wInv.Code)
+	var inv map[string]any
+	require.NoError(t, json.Unmarshal(wInv.Body.Bytes(), &inv))
+
+	wJoin := req(t, r, http.MethodPost, "/v1/couples/join",
+		fmt.Sprintf(`{"code":%q}`, inv["code"]), tokenB)
+	require.Equal(t, http.StatusOK, wJoin.Code)
+	return
+}
+
+// --- POST /transactions ---
+
+func TestIntegration_CreateTransaction(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	t.Run("success returns 201 with created transaction", func(t *testing.T) {
+		token, userID := registerAndLogin(t, r, "tx_ok@test.com", "Senha123")
+
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440001","amount":150.50,"direction":"out","date":"2026-10-17","is_shared":false}`
+		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+
+		assert.Equal(t, http.StatusCreated, w.Code)
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Equal(t, userID, resp["user_id"])
+		assert.Equal(t, "150.50", resp["amount"])
+		assert.Equal(t, "out", resp["direction"])
+		assert.Equal(t, "2026-10-17", resp["date"])
+		assert.NotEmpty(t, resp["id"])
+	})
+
+	t.Run("duplicate client_id returns 200 with existing transaction", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "tx_idem@test.com", "Senha123")
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440002","amount":50.00,"direction":"in","date":"2026-10-17"}`
+
+		w1 := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+		require.Equal(t, http.StatusCreated, w1.Code)
+		var first map[string]any
+		require.NoError(t, json.Unmarshal(w1.Body.Bytes(), &first))
+
+		w2 := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+		assert.Equal(t, http.StatusOK, w2.Code)
+		var second map[string]any
+		require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &second))
+		assert.Equal(t, first["id"], second["id"], "idempotent: same transaction returned")
+	})
+
+	t.Run("amount zero returns 422", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "tx_amt@test.com", "Senha123")
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440003","amount":0,"direction":"out","date":"2026-10-17"}`
+		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Contains(t, w.Body.String(), "Amount")
+	})
+
+	t.Run("invalid direction returns 422", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "tx_dir@test.com", "Senha123")
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440004","amount":10,"direction":"sideways","date":"2026-10-17"}`
+		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Contains(t, w.Body.String(), "direction")
+	})
+
+	t.Run("invalid date format returns 422", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "tx_date@test.com", "Senha123")
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440005","amount":10,"direction":"out","date":"17/10/2026"}`
+		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Contains(t, w.Body.String(), "date")
+	})
+
+	t.Run("is_shared without couple returns 400", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "tx_shared@test.com", "Senha123")
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440006","amount":10,"direction":"out","date":"2026-10-17","is_shared":true}`
+		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("is_shared with couple returns 201", func(t *testing.T) {
+		tokenA, _ := createCouple(t, r, "tx_couple_a@test.com", "tx_couple_b@test.com")
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440007","amount":200,"direction":"out","date":"2026-10-17","is_shared":true}`
+		w := req(t, r, http.MethodPost, "/v1/transactions", body, tokenA)
+		assert.Equal(t, http.StatusCreated, w.Code)
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Equal(t, true, resp["is_shared"])
+	})
+
+	t.Run("category from another user returns 403", func(t *testing.T) {
+		tokenA, _ := registerAndLogin(t, r, "tx_catA@test.com", "Senha123")
+		tokenB, _ := registerAndLogin(t, r, "tx_catB@test.com", "Senha123")
+
+		// B creates a category
+		var catID string
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`INSERT INTO categories (user_id, name, type) VALUES ((SELECT id FROM users WHERE email='tx_catB@test.com'), 'Lazer', 'leisure') RETURNING id`,
+		).Scan(&catID))
+
+		body := fmt.Sprintf(`{"client_id":"550e8400-e29b-41d4-a716-446655440008","amount":10,"direction":"out","date":"2026-10-17","category_id":%q}`, catID)
+		_ = tokenB
+		w := req(t, r, http.MethodPost, "/v1/transactions", body, tokenA)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("own category is accepted", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "tx_owncat@test.com", "Senha123")
+
+		var catID string
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`INSERT INTO categories (user_id, name, type) VALUES ((SELECT id FROM users WHERE email='tx_owncat@test.com'), 'Alimentação', 'necessity') RETURNING id`,
+		).Scan(&catID))
+
+		body := fmt.Sprintf(`{"client_id":"550e8400-e29b-41d4-a716-446655440009","amount":30,"direction":"out","date":"2026-10-17","category_id":%q}`, catID)
+		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
+		assert.Equal(t, http.StatusCreated, w.Code)
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Equal(t, catID, resp["category_id"])
+	})
+
+	t.Run("without token returns 401", func(t *testing.T) {
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440010","amount":10,"direction":"out","date":"2026-10-17"}`
+		w := req(t, r, http.MethodPost, "/v1/transactions", body, "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+// --- handler unit tests for 500 paths ---
+
+func TestHandler_Create_InternalError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("user_id", "user-test"); c.Next() })
+	h := transaction.NewHandlerWithService(&mockSvc{err: fmt.Errorf("unexpected")})
+	h.RegisterRoutes(r.Group("/v1"))
+
+	httpReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/transactions",
+		strings.NewReader(`{"client_id":"550e8400-e29b-41d4-a716-446655440099","amount":10,"direction":"out","date":"2026-10-17"}`))
+	httpReq.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httpReq)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "internal server error")
+}
+
+// mockSvc satisfies transactionService for handler unit tests.
+type mockSvc struct{ err error }
+
+func (m *mockSvc) Create(_ context.Context, _ string, _ *transaction.CreateInput) (transaction.Transaction, bool, error) {
+	return transaction.Transaction{}, false, m.err
+}
