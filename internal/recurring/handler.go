@@ -13,6 +13,7 @@ type recurringService interface {
 	Create(ctx context.Context, userID string, input CreateInput) (Recurring, error)
 	Update(ctx context.Context, userID, id string, input UpdateInput) (Recurring, error)
 	Delete(ctx context.Context, userID, id string) error
+	UpsertOverride(ctx context.Context, userID, recurringID string, input OverrideInput) (RecurringOverride, error)
 }
 
 // Handler handles HTTP requests for the recurring domain.
@@ -36,6 +37,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/recurring", h.create)
 	rg.PUT("/recurring/:id", h.update)
 	rg.DELETE("/recurring/:id", h.delete)
+	rg.PUT("/recurring/:id/override", h.upsertOverride)
 }
 
 func (h *Handler) list(c *gin.Context) {
@@ -113,4 +115,30 @@ func (h *Handler) delete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) upsertOverride(c *gin.Context) {
+	id := c.Param("id")
+	var input OverrideInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	userID := c.GetString("user_id")
+	o, err := h.service.UpsertOverride(c.Request.Context(), userID, id, input)
+	if err != nil {
+		var valErr *ValidationError
+		switch {
+		case errors.As(err, &valErr):
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": valErr.Message, "field": valErr.Field})
+		case errors.Is(err, ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "recurring expense not found"})
+		case errors.Is(err, ErrForbidden):
+			c.JSON(http.StatusForbidden, gin.H{"error": "not the owner of this recurring expense"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, o)
 }

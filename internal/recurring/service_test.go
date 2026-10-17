@@ -187,6 +187,76 @@ func TestService_Delete_RepoError(t *testing.T) {
 	assert.Contains(t, err.Error(), "db error")
 }
 
+// --- UpsertOverride ---
+
+func TestService_UpsertOverride_NotFound(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	_, err := svc.UpsertOverride(context.Background(), "user-1", "rec-999", OverrideInput{Year: 2026, Month: 10})
+	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestService_UpsertOverride_Forbidden(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Recurring, error) {
+			return Recurring{ID: "rec-1", UserID: "other"}, nil
+		},
+	}}
+	_, err := svc.UpsertOverride(context.Background(), "user-1", "rec-1", OverrideInput{Year: 2026, Month: 10})
+	assert.ErrorIs(t, err, ErrForbidden)
+}
+
+func TestService_UpsertOverride_InvalidMonth(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	_, err := svc.UpsertOverride(context.Background(), "user-1", "rec-1", OverrideInput{Year: 2026, Month: 13})
+	var valErr *ValidationError
+	require.ErrorAs(t, err, &valErr)
+	assert.Equal(t, "month", valErr.Field)
+}
+
+func TestService_UpsertOverride_InvalidYear(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	_, err := svc.UpsertOverride(context.Background(), "user-1", "rec-1", OverrideInput{Year: 0, Month: 5})
+	var valErr *ValidationError
+	require.ErrorAs(t, err, &valErr)
+	assert.Equal(t, "year", valErr.Field)
+}
+
+func TestService_UpsertOverride_InvalidAmountOverride(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	amt := -10.0
+	_, err := svc.UpsertOverride(context.Background(), "user-1", "rec-1", OverrideInput{Year: 2026, Month: 5, AmountOverride: &amt})
+	var valErr *ValidationError
+	require.ErrorAs(t, err, &valErr)
+	assert.Equal(t, "amount_override", valErr.Field)
+}
+
+func TestService_UpsertOverride_Success(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Recurring, error) {
+			return Recurring{ID: "rec-1", UserID: "user-1"}, nil
+		},
+	}}
+	o, err := svc.UpsertOverride(context.Background(), "user-1", "rec-1", OverrideInput{Year: 2026, Month: 10, Active: false})
+	require.NoError(t, err)
+	assert.Equal(t, "rec-1", o.RecurringID)
+	assert.Equal(t, 2026, o.Year)
+	assert.Equal(t, 10, o.Month)
+}
+
+func TestService_UpsertOverride_RepoError(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		findByIDFn: func(_ context.Context, _ string) (Recurring, error) {
+			return Recurring{ID: "rec-1", UserID: "user-1"}, nil
+		},
+		upsertOverrideFn: func(_ context.Context, _ string, _ *OverrideInput) (RecurringOverride, error) {
+			return RecurringOverride{}, errors.New("db error")
+		},
+	}}
+	_, err := svc.UpsertOverride(context.Background(), "user-1", "rec-1", OverrideInput{Year: 2026, Month: 10})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
+}
+
 // --- List ---
 
 func TestService_List_Success(t *testing.T) {
