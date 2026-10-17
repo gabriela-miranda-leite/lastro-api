@@ -17,6 +17,7 @@ import (
 	"github.com/gabriela-miranda-leite/lastro-api/internal/health"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/middleware"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/purge"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/recurring"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/transaction"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/user"
 )
@@ -67,6 +68,9 @@ func main() {
 
 	txHandler := transaction.NewHandler(transaction.NewService(transaction.NewRepository(database)))
 	txHandler.RegisterRoutes(protected)
+
+	recurringHandler := recurring.NewHandler(recurring.NewService(recurring.NewRepository(database)))
+	recurringHandler.RegisterRoutes(protected)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
