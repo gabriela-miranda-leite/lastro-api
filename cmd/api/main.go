@@ -11,6 +11,7 @@ import (
 	"github.com/gabriela-miranda-leite/lastro-api/internal/auth"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/db"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/health"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/middleware"
 )
 
 func main() {
@@ -43,6 +44,9 @@ func main() {
 	authHandler := auth.NewHandler(auth.NewService(auth.NewRepository(database), cfg.JWTSecret))
 	v1 := r.Group("/v1")
 	authHandler.RegisterRoutes(v1.Group("/auth"))
+
+	protected := v1.Group("/")
+	protected.Use(middleware.Auth(database, cfg.JWTSecret))
 
 	slog.Info("starting lastro-api", "port", cfg.Port, "env", cfg.Env)
 	if err := r.Run(":" + cfg.Port); err != nil {
