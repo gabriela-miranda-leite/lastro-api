@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -18,10 +19,20 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// SetupTestDB starts a PostgreSQL container, runs all migrations, and returns a
-// ready-to-use *sql.DB. The container is terminated when the test finishes.
+// SetupTestDB returns a *sql.DB ready for integration tests.
+// If TEST_DATABASE_URL is set (e.g. in CI), it connects directly to that instance.
+// Otherwise it spins up a postgres:16-alpine container via testcontainers.
 func SetupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
+
+	if dsn := os.Getenv("TEST_DATABASE_URL"); dsn != "" {
+		db, err := sql.Open("pgx", dsn)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = db.Close() })
+		runMigrations(t, db)
+		return db
+	}
+
 	ctx := context.Background()
 
 	container, err := tcpostgres.RunContainer(ctx,
