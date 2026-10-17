@@ -22,6 +22,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/users/me", h.me)
 	rg.PUT("/users/me", h.updateMe)
 	rg.GET("/users/me/export", h.export)
+	rg.DELETE("/users/me", h.deleteMe)
 }
 
 func (h *Handler) updateMe(c *gin.Context) {
@@ -49,6 +50,30 @@ func (h *Handler) updateMe(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) deleteMe(c *gin.Context) {
+	var input DeleteInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	err := h.service.Delete(c.Request.Context(), userID, input)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidPassword):
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid password"})
+		case errors.Is(err, ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) export(c *gin.Context) {

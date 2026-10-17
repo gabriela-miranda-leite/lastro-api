@@ -3,6 +3,8 @@ package user
 import (
 	"context"
 	"fmt"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Service contains business logic for the user domain.
@@ -21,6 +23,23 @@ func (s *Service) Me(ctx context.Context, userID string) (MeResponse, error) {
 		return MeResponse{}, fmt.Errorf("user.service.Me: %w", err)
 	}
 	return me, nil
+}
+
+func (s *Service) Delete(ctx context.Context, userID string, input DeleteInput) error {
+	hash, err := s.repo.findPasswordHash(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("user.service.Delete: %w", err)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(input.Password)); err != nil {
+		return ErrInvalidPassword
+	}
+
+	if err := s.repo.softDelete(ctx, userID, hash); err != nil {
+		return fmt.Errorf("user.service.Delete: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) Export(ctx context.Context, userID, ip string) (ExportData, error) {

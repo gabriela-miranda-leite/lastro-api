@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -12,6 +15,7 @@ import (
 	"github.com/gabriela-miranda-leite/lastro-api/internal/db"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/health"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/middleware"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/purge"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/user"
 )
 
@@ -56,8 +60,16 @@ func main() {
 	userHandler := user.NewHandler(user.NewService(user.NewRepository(database)))
 	userHandler.RegisterRoutes(protected)
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		purge.New(database).Run(ctx)
+		stop()
+	}()
+
 	slog.Info("starting lastro-api", "port", cfg.Port, "env", cfg.Env)
 	if err := r.Run(":" + cfg.Port); err != nil {
+		stop()
 		slog.Error("server error", "error", err)
 		_ = database.Close()
 		os.Exit(1)
