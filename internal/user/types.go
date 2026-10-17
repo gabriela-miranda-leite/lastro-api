@@ -1,6 +1,17 @@
 package user
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrInvalidInput = errors.New("invalid input")
+
+type UpdateInput struct {
+	Name          *string  `json:"name"`
+	MonthlyIncome *float64 `json:"monthly_income"`
+	SavingGoalPct *float64 `json:"saving_goal_pct"`
+}
 
 type MeResponse struct {
 	ID            string           `json:"id"`
