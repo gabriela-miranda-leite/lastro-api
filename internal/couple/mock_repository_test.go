@@ -10,6 +10,8 @@ type mockRepository struct {
 	invalidatePreviousInvitesFn func(ctx context.Context, userID string) error
 	createInviteFn              func(ctx context.Context, userID, code string) (InviteResponse, error)
 	codeExistsFn                func(ctx context.Context, code string) (bool, error)
+	findInviteByCodeFn          func(ctx context.Context, code string) (InviteRecord, error)
+	joinCoupleFn                func(ctx context.Context, inviteID, inviterID, joinerID string) (JoinResponse, error)
 }
 
 func (m *mockRepository) isInCouple(ctx context.Context, userID string) (bool, error) {
@@ -38,4 +40,18 @@ func (m *mockRepository) codeExists(ctx context.Context, code string) (bool, err
 		return m.codeExistsFn(ctx, code)
 	}
 	return false, nil
+}
+
+func (m *mockRepository) findInviteByCode(ctx context.Context, code string) (InviteRecord, error) {
+	if m.findInviteByCodeFn != nil {
+		return m.findInviteByCodeFn(ctx, code)
+	}
+	return InviteRecord{}, ErrInviteNotFound
+}
+
+func (m *mockRepository) joinCouple(ctx context.Context, inviteID, inviterID, joinerID string) (JoinResponse, error) {
+	if m.joinCoupleFn != nil {
+		return m.joinCoupleFn(ctx, inviteID, inviterID, joinerID)
+	}
+	return JoinResponse{CoupleID: "couple-1"}, nil
 }

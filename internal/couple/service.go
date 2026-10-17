@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"time"
 )
 
 const inviteCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -19,6 +20,37 @@ type Service struct {
 // NewService creates a new Service.
 func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
+}
+
+// Join accepts an invite code and links the joiner with the inviter as a couple.
+// Returns ErrInviteNotFound, ErrInviteExpired, ErrSelfJoin, or ErrAlreadyInCouple on failure.
+func (s *Service) Join(ctx context.Context, joinerID, code string) (JoinResponse, error) {
+	invite, err := s.repo.findInviteByCode(ctx, code)
+	if err != nil {
+		return JoinResponse{}, fmt.Errorf("couple.service.Join: %w", err)
+	}
+
+	if invite.UsedAt != nil || time.Now().After(invite.ExpiresAt) {
+		return JoinResponse{}, ErrInviteExpired
+	}
+
+	if invite.InviterID == joinerID {
+		return JoinResponse{}, ErrSelfJoin
+	}
+
+	inCouple, err := s.repo.isInCouple(ctx, joinerID)
+	if err != nil {
+		return JoinResponse{}, fmt.Errorf("couple.service.Join: %w", err)
+	}
+	if inCouple {
+		return JoinResponse{}, ErrAlreadyInCouple
+	}
+
+	resp, err := s.repo.joinCouple(ctx, invite.ID, invite.InviterID, joinerID)
+	if err != nil {
+		return JoinResponse{}, fmt.Errorf("couple.service.Join: %w", err)
+	}
+	return resp, nil
 }
 
 // Invite generates a unique 6-char invite code for the user, invalidating any previous active invite.
