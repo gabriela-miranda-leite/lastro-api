@@ -12,6 +12,7 @@ import (
 
 	"github.com/gabriela-miranda-leite/lastro-api/config"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/auth"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/couple"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/db"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/health"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/middleware"
@@ -59,6 +60,9 @@ func main() {
 
 	userHandler := user.NewHandler(user.NewService(user.NewRepository(database)))
 	userHandler.RegisterRoutes(protected)
+
+	coupleHandler := couple.NewHandler(couple.NewService(couple.NewRepository(database)))
+	coupleHandler.RegisterRoutes(protected)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
