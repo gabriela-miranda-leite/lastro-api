@@ -1,11 +1,16 @@
 package user
 
-import (
-	"errors"
-	"time"
-)
+import "time"
 
-var ErrInvalidInput = errors.New("invalid input")
+// ValidationError carries a user-facing message for a specific field.
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	return e.Field + ": " + e.Message
+}
 
 type UpdateInput struct {
 	Name          *string  `json:"name"`
