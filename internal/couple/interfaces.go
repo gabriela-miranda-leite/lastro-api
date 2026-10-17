@@ -7,4 +7,6 @@ type repository interface {
 	invalidatePreviousInvites(ctx context.Context, userID string) error
 	createInvite(ctx context.Context, userID, code string) (InviteResponse, error)
 	codeExists(ctx context.Context, code string) (bool, error)
+	findInviteByCode(ctx context.Context, code string) (InviteRecord, error)
+	joinCouple(ctx context.Context, inviteID, inviterID, joinerID string) (JoinResponse, error)
 }

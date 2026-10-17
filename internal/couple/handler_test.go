@@ -167,3 +167,110 @@ func TestIntegration_Invite(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
+
+// --- POST /couples/join ---
+
+func TestIntegration_Join(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	t.Run("success links both users with same couple_id", func(t *testing.T) {
+		tokenA, userA := registerAndLogin(t, r, "joina@test.com", "Senha123")
+		tokenB, userB := registerAndLogin(t, r, "joinb@test.com", "Senha123")
+
+		w := req(t, r, http.MethodPost, "/v1/couples/invite", "", tokenA)
+		require.Equal(t, http.StatusCreated, w.Code)
+		var inv map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &inv))
+		code := inv["code"].(string)
+
+		w2 := req(t, r, http.MethodPost, "/v1/couples/join",
+			fmt.Sprintf(`{"code":%q}`, code), tokenB)
+		assert.Equal(t, http.StatusOK, w2.Code)
+
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(w2.Body.Bytes(), &resp))
+		coupleID := resp["couple_id"].(string)
+		assert.NotEmpty(t, coupleID)
+
+		// both users must share the same couple_id
+		var idA, idB string
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT couple_id FROM users WHERE id = $1`, userA).Scan(&idA))
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT couple_id FROM users WHERE id = $1`, userB).Scan(&idB))
+		assert.Equal(t, coupleID, idA)
+		assert.Equal(t, coupleID, idB)
+	})
+
+	t.Run("invite marked as used after join", func(t *testing.T) {
+		tokenA, _ := registerAndLogin(t, r, "useda@test.com", "Senha123")
+		tokenB, _ := registerAndLogin(t, r, "usedb@test.com", "Senha123")
+
+		w := req(t, r, http.MethodPost, "/v1/couples/invite", "", tokenA)
+		require.Equal(t, http.StatusCreated, w.Code)
+		var inv map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &inv))
+		code := inv["code"].(string)
+
+		req(t, r, http.MethodPost, "/v1/couples/join",
+			fmt.Sprintf(`{"code":%q}`, code), tokenB)
+
+		var usedAt sql.NullTime
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT used_at FROM couple_invites WHERE code = $1`, code).Scan(&usedAt))
+		assert.True(t, usedAt.Valid)
+	})
+
+	t.Run("unknown code returns 404", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "notfound@test.com", "Senha123")
+		w := req(t, r, http.MethodPost, "/v1/couples/join", `{"code":"ZZZZZZ"}`, token)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("self-join returns 400", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "selfjoin@test.com", "Senha123")
+
+		w := req(t, r, http.MethodPost, "/v1/couples/invite", "", token)
+		require.Equal(t, http.StatusCreated, w.Code)
+		var inv map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &inv))
+		code := inv["code"].(string)
+
+		w2 := req(t, r, http.MethodPost, "/v1/couples/join",
+			fmt.Sprintf(`{"code":%q}`, code), token)
+		assert.Equal(t, http.StatusBadRequest, w2.Code)
+	})
+
+	t.Run("joiner already in couple returns 409", func(t *testing.T) {
+		tokenA, _ := registerAndLogin(t, r, "conflict_a@test.com", "Senha123")
+		tokenB, userB := registerAndLogin(t, r, "conflict_b@test.com", "Senha123")
+		tokenC, _ := registerAndLogin(t, r, "conflict_c@test.com", "Senha123")
+
+		// A generates invite, B joins
+		wInv := req(t, r, http.MethodPost, "/v1/couples/invite", "", tokenA)
+		require.Equal(t, http.StatusCreated, wInv.Code)
+		var inv map[string]any
+		require.NoError(t, json.Unmarshal(wInv.Body.Bytes(), &inv))
+		codeA := inv["code"].(string)
+		req(t, r, http.MethodPost, "/v1/couples/join",
+			fmt.Sprintf(`{"code":%q}`, codeA), tokenB)
+
+		// C generates invite, B (already in couple) tries to join
+		wInv2 := req(t, r, http.MethodPost, "/v1/couples/invite", "", tokenC)
+		require.Equal(t, http.StatusCreated, wInv2.Code)
+		var inv2 map[string]any
+		require.NoError(t, json.Unmarshal(wInv2.Body.Bytes(), &inv2))
+		codeC := inv2["code"].(string)
+
+		_ = userB
+		w := req(t, r, http.MethodPost, "/v1/couples/join",
+			fmt.Sprintf(`{"code":%q}`, codeC), tokenB)
+		assert.Equal(t, http.StatusConflict, w.Code)
+	})
+
+	t.Run("without token returns 401", func(t *testing.T) {
+		w := req(t, r, http.MethodPost, "/v1/couples/join", `{"code":"ABCDEF"}`, "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
