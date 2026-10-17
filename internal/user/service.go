@@ -23,6 +23,19 @@ func (s *Service) Me(ctx context.Context, userID string) (MeResponse, error) {
 	return me, nil
 }
 
+func (s *Service) Export(ctx context.Context, userID, ip string) (ExportData, error) {
+	export, err := s.repo.buildExport(ctx, userID)
+	if err != nil {
+		return ExportData{}, fmt.Errorf("user.service.Export: %w", err)
+	}
+
+	if err := s.repo.insertAuditLog(ctx, userID, "export_data", ip); err != nil {
+		return ExportData{}, fmt.Errorf("user.service.Export: %w", err)
+	}
+
+	return export, nil
+}
+
 func (s *Service) Update(ctx context.Context, userID string, input UpdateInput) (MeResponse, error) {
 	if input.Name != nil {
 		if *input.Name == "" {
