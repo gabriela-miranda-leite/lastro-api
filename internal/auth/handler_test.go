@@ -57,7 +57,7 @@ func subtestIP(t *testing.T) string {
 
 func post(t *testing.T, r *gin.Engine, path, body, token string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.RemoteAddr = subtestIP(t)
 	if token != "" {
@@ -185,7 +185,7 @@ func TestIntegration_Login(t *testing.T) {
 		// use a dedicated router instance so the in-memory limiter starts fresh
 		rl := setupRouter(db)
 		makeReq := func() int {
-			req := httptest.NewRequest(http.MethodPost, "/v1/auth/login",
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/auth/login",
 				strings.NewReader(`{"email":"x@x.com","password":"SenhaErrada1"}`))
 			req.Header.Set("Content-Type", "application/json")
 			req.RemoteAddr = "10.0.1.99:1234"
