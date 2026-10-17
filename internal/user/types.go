@@ -18,6 +18,10 @@ type UpdateInput struct {
 	SavingGoalPct *float64 `json:"saving_goal_pct"`
 }
 
+type DeleteInput struct {
+	Password string `json:"password" binding:"required"`
+}
+
 type MeResponse struct {
 	ID            string           `json:"id"`
 	Name          string           `json:"name"`
