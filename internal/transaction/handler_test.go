@@ -307,6 +307,30 @@ func TestIntegration_ListTransactions(t *testing.T) {
 		assert.Equal(t, "in", resp[0]["direction"])
 	})
 
+	t.Run("filter by category_id", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "list_cat@test.com", "Senha123")
+
+		var catID string
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`INSERT INTO categories (user_id, name, type) VALUES ((SELECT id FROM users WHERE email='list_cat@test.com'), 'Mercado', 'necessity') RETURNING id`,
+		).Scan(&catID))
+
+		req(t, r, http.MethodPost, "/v1/transactions",
+			fmt.Sprintf(`{"client_id":"550e8400-e29b-41d4-a716-446655441010","amount":50,"direction":"out","date":"2026-10-01","category_id":%q}`, catID),
+			token)
+		req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441011","amount":30,"direction":"out","date":"2026-10-02"}`,
+			token)
+
+		w := req(t, r, http.MethodGet,
+			fmt.Sprintf("/v1/transactions?year=2026&month=10&category_id=%s", catID), "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Len(t, resp, 1)
+		assert.Equal(t, catID, resp[0]["category_id"])
+	})
+
 	t.Run("access partner transactions in couple", func(t *testing.T) {
 		tokenA, userIDA := registerAndLogin(t, r, "list_coupleA@test.com", "Senha123")
 		tokenB, userIDB := registerAndLogin(t, r, "list_coupleB@test.com", "Senha123")
