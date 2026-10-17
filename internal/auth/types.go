@@ -31,3 +31,8 @@ type AuthResponse struct {
 type RefreshInput struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
+
+// LogoutInput is the request body for POST /auth/logout.
+type LogoutInput struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}

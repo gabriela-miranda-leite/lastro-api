@@ -112,6 +112,20 @@ func (r *Repository) revokeRefreshToken(ctx context.Context, tokenID string) err
 	return nil
 }
 
+// revokeRefreshTokenByHash revokes a single token scoped to a user.
+// If the token doesn't exist or belongs to another user it's a no-op (idempotent).
+func (r *Repository) revokeRefreshTokenByHash(ctx context.Context, userID, tokenHash string) error {
+	const q = `
+		UPDATE refresh_tokens
+		SET revoked_at = now()
+		WHERE token_hash = $1 AND user_id = $2 AND revoked_at IS NULL`
+
+	if _, err := r.db.ExecContext(ctx, q, tokenHash, userID); err != nil {
+		return fmt.Errorf("auth.repository.revokeRefreshTokenByHash: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) revokeAllUserTokens(ctx context.Context, userID string) error {
 	const q = `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`
 	if _, err := r.db.ExecContext(ctx, q, userID); err != nil {
