@@ -33,9 +33,10 @@ func (h *Handler) updateMe(c *gin.Context) {
 	userID := c.GetString("user_id")
 	resp, err := h.service.Update(c.Request.Context(), userID, input)
 	if err != nil {
+		var valErr *ValidationError
 		switch {
-		case errors.Is(err, ErrInvalidInput):
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		case errors.As(err, &valErr):
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": valErr.Field + ": " + valErr.Message})
 		case errors.Is(err, ErrNoFieldsToUpdate):
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "no fields to update"})
 		case errors.Is(err, ErrNotFound):
