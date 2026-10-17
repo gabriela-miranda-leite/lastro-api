@@ -21,6 +21,7 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/users/me", h.me)
 	rg.PUT("/users/me", h.updateMe)
+	rg.GET("/users/me/export", h.export)
 }
 
 func (h *Handler) updateMe(c *gin.Context) {
@@ -48,6 +49,24 @@ func (h *Handler) updateMe(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) export(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	data, err := h.service.Export(c.Request.Context(), userID, c.ClientIP())
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	filename := "export-" + userID + ".json"
+	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
+	c.JSON(http.StatusOK, data)
 }
 
 func (h *Handler) me(c *gin.Context) {
