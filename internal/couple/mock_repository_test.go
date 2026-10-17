@@ -12,6 +12,9 @@ type mockRepository struct {
 	codeExistsFn                func(ctx context.Context, code string) (bool, error)
 	findInviteByCodeFn          func(ctx context.Context, code string) (InviteRecord, error)
 	joinCoupleFn                func(ctx context.Context, inviteID, inviterID, joinerID string) (JoinResponse, error)
+	findCoupleIDFn              func(ctx context.Context, userID string) (string, error)
+	findPartnerIDFn             func(ctx context.Context, userID, coupleID string) (string, error)
+	unlinkFn                    func(ctx context.Context, userID, partnerID, coupleID string) error
 }
 
 func (m *mockRepository) isInCouple(ctx context.Context, userID string) (bool, error) {
@@ -54,4 +57,25 @@ func (m *mockRepository) joinCouple(ctx context.Context, inviteID, inviterID, jo
 		return m.joinCoupleFn(ctx, inviteID, inviterID, joinerID)
 	}
 	return JoinResponse{CoupleID: "couple-1"}, nil
+}
+
+func (m *mockRepository) findCoupleID(ctx context.Context, userID string) (string, error) {
+	if m.findCoupleIDFn != nil {
+		return m.findCoupleIDFn(ctx, userID)
+	}
+	return "", ErrNotInCouple
+}
+
+func (m *mockRepository) findPartnerID(ctx context.Context, userID, coupleID string) (string, error) {
+	if m.findPartnerIDFn != nil {
+		return m.findPartnerIDFn(ctx, userID, coupleID)
+	}
+	return "partner-1", nil
+}
+
+func (m *mockRepository) unlink(ctx context.Context, userID, partnerID, coupleID string) error {
+	if m.unlinkFn != nil {
+		return m.unlinkFn(ctx, userID, partnerID, coupleID)
+	}
+	return nil
 }

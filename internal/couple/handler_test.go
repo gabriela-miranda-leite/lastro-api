@@ -274,3 +274,98 @@ func TestIntegration_Join(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
+
+// --- DELETE /couples ---
+
+func TestIntegration_Unlink(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	// helper: creates a couple between two registered users and returns both tokens
+	createCouple := func(t *testing.T, emailA, emailB string) (tokenA, tokenB, userA, userB string) {
+		t.Helper()
+		tokenA, userA = registerAndLogin(t, r, emailA, "Senha123")
+		tokenB, userB = registerAndLogin(t, r, emailB, "Senha123")
+
+		w := req(t, r, http.MethodPost, "/v1/couples/invite", "", tokenA)
+		require.Equal(t, http.StatusCreated, w.Code)
+		var inv map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &inv))
+		code := inv["code"].(string)
+
+		w2 := req(t, r, http.MethodPost, "/v1/couples/join",
+			fmt.Sprintf(`{"code":%q}`, code), tokenB)
+		require.Equal(t, http.StatusOK, w2.Code)
+		return
+	}
+
+	t.Run("success returns 204 and both users lose couple_id", func(t *testing.T) {
+		tokenA, _, userA, userB := createCouple(t, "unlink_a@test.com", "unlink_b@test.com")
+
+		w := req(t, r, http.MethodDelete, "/v1/couples", "", tokenA)
+		assert.Equal(t, http.StatusNoContent, w.Code)
+
+		var coupleA, coupleB sql.NullString
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT couple_id FROM users WHERE id = $1`, userA).Scan(&coupleA))
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT couple_id FROM users WHERE id = $1`, userB).Scan(&coupleB))
+		assert.False(t, coupleA.Valid, "userA should have no couple_id")
+		assert.False(t, coupleB.Valid, "userB should have no couple_id")
+	})
+
+	t.Run("two audit_log rows written with correct action", func(t *testing.T) {
+		tokenA, _, userA, userB := createCouple(t, "audit_a@test.com", "audit_b@test.com")
+
+		req(t, r, http.MethodDelete, "/v1/couples", "", tokenA)
+
+		var count int
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT COUNT(*) FROM audit_log
+			  WHERE user_id = ANY($1::uuid[]) AND action = 'unlink_couple'`,
+			fmt.Sprintf("{%s,%s}", userA, userB),
+		).Scan(&count))
+		assert.Equal(t, 2, count)
+	})
+
+	t.Run("couple record in couples table is preserved", func(t *testing.T) {
+		tokenA, _, userA, _ := createCouple(t, "preserve_a@test.com", "preserve_b@test.com")
+
+		var coupleID string
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT couple_id FROM users WHERE id = $1`, userA).Scan(&coupleID))
+
+		req(t, r, http.MethodDelete, "/v1/couples", "", tokenA)
+
+		var exists bool
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT EXISTS(SELECT 1 FROM couples WHERE id = $1)`, coupleID).Scan(&exists))
+		assert.True(t, exists, "couple record should remain in couples table")
+	})
+
+	t.Run("partner can also initiate unlink", func(t *testing.T) {
+		_, tokenB, userA, userB := createCouple(t, "partner_a@test.com", "partner_b@test.com")
+
+		w := req(t, r, http.MethodDelete, "/v1/couples", "", tokenB)
+		assert.Equal(t, http.StatusNoContent, w.Code)
+
+		var coupleA, coupleB sql.NullString
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT couple_id FROM users WHERE id = $1`, userA).Scan(&coupleA))
+		require.NoError(t, db.QueryRowContext(context.Background(),
+			`SELECT couple_id FROM users WHERE id = $1`, userB).Scan(&coupleB))
+		assert.False(t, coupleA.Valid)
+		assert.False(t, coupleB.Valid)
+	})
+
+	t.Run("user not in couple returns 404", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "solo@test.com", "Senha123")
+		w := req(t, r, http.MethodDelete, "/v1/couples", "", token)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("without token returns 401", func(t *testing.T) {
+		w := req(t, r, http.MethodDelete, "/v1/couples", "", "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}

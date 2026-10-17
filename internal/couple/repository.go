@@ -3,6 +3,7 @@ package couple
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -92,6 +93,75 @@ func (r *Repository) findInviteByCode(ctx context.Context, code string) (InviteR
 		rec.UsedAt = &t
 	}
 	return rec, nil
+}
+
+func (r *Repository) findCoupleID(ctx context.Context, userID string) (string, error) {
+	var coupleID sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		`SELECT couple_id FROM users WHERE id = $1 AND deleted_at IS NULL`,
+		userID,
+	).Scan(&coupleID)
+	if err == sql.ErrNoRows || !coupleID.Valid {
+		return "", ErrNotInCouple
+	}
+	if err != nil {
+		return "", fmt.Errorf("couple.repository.findCoupleID: %w", err)
+	}
+	return coupleID.String, nil
+}
+
+func (r *Repository) findPartnerID(ctx context.Context, userID, coupleID string) (string, error) {
+	var partnerID string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id FROM users
+		  WHERE couple_id = $1 AND id != $2 AND deleted_at IS NULL
+		  LIMIT 1`,
+		coupleID, userID,
+	).Scan(&partnerID)
+	if err == sql.ErrNoRows {
+		return "", nil // partner already unlinked or deleted; proceed without them
+	}
+	if err != nil {
+		return "", fmt.Errorf("couple.repository.findPartnerID: %w", err)
+	}
+	return partnerID, nil
+}
+
+// unlink atomically clears couple_id for both users and writes two audit_log rows.
+func (r *Repository) unlink(ctx context.Context, userID, partnerID, coupleID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("couple.repository.unlink: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // rollback is a no-op after commit
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET couple_id = NULL
+		  WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`,
+		fmt.Sprintf("{%s,%s}", userID, partnerID),
+	); err != nil {
+		return fmt.Errorf("couple.repository.unlink: clear couple_id: %w", err)
+	}
+
+	metadata, err := json.Marshal(map[string]string{"couple_id": coupleID})
+	if err != nil {
+		return fmt.Errorf("couple.repository.unlink: %w", err)
+	}
+
+	for _, uid := range []string{userID, partnerID} {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO audit_log (user_id, action, entity, entity_id, metadata)
+			 VALUES ($1, 'unlink_couple', 'couple', $2, $3)`,
+			uid, coupleID, metadata,
+		); err != nil {
+			return fmt.Errorf("couple.repository.unlink: audit_log: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("couple.repository.unlink: %w", err)
+	}
+	return nil
 }
 
 // joinCouple runs a transaction: creates a couple, links both users, marks invite used.

@@ -10,6 +10,60 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestService_Unlink(t *testing.T) {
+	t.Run("not in couple returns ErrNotInCouple", func(t *testing.T) {
+		repo := &mockRepository{} // default findCoupleID returns ErrNotInCouple
+		svc := &Service{repo: repo}
+
+		err := svc.Unlink(context.Background(), "user-1")
+
+		assert.ErrorIs(t, err, ErrNotInCouple)
+	})
+
+	t.Run("success calls unlink with correct args", func(t *testing.T) {
+		unlinkCalled := false
+		var gotUserID, gotPartnerID, gotCoupleID string
+		repo := &mockRepository{
+			findCoupleIDFn: func(_ context.Context, _ string) (string, error) {
+				return "couple-abc", nil
+			},
+			findPartnerIDFn: func(_ context.Context, _, _ string) (string, error) {
+				return "partner-1", nil
+			},
+			unlinkFn: func(_ context.Context, userID, partnerID, coupleID string) error {
+				unlinkCalled = true
+				gotUserID, gotPartnerID, gotCoupleID = userID, partnerID, coupleID
+				return nil
+			},
+		}
+		svc := &Service{repo: repo}
+
+		err := svc.Unlink(context.Background(), "user-1")
+
+		require.NoError(t, err)
+		assert.True(t, unlinkCalled)
+		assert.Equal(t, "user-1", gotUserID)
+		assert.Equal(t, "partner-1", gotPartnerID)
+		assert.Equal(t, "couple-abc", gotCoupleID)
+	})
+
+	t.Run("unlink with no partner (partner already deleted) still succeeds", func(t *testing.T) {
+		repo := &mockRepository{
+			findCoupleIDFn: func(_ context.Context, _ string) (string, error) {
+				return "couple-abc", nil
+			},
+			findPartnerIDFn: func(_ context.Context, _, _ string) (string, error) {
+				return "", nil // no partner found
+			},
+		}
+		svc := &Service{repo: repo}
+
+		err := svc.Unlink(context.Background(), "user-1")
+
+		assert.NoError(t, err)
+	})
+}
+
 func activeInvite(inviterID string) InviteRecord {
 	return InviteRecord{
 		ID:        "inv-1",

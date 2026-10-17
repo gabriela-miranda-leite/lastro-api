@@ -21,6 +21,7 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/couples/invite", h.invite)
 	rg.POST("/couples/join", h.join)
+	rg.DELETE("/couples", h.unlink)
 }
 
 func (h *Handler) join(c *gin.Context) {
@@ -49,6 +50,22 @@ func (h *Handler) join(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) unlink(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	if err := h.service.Unlink(c.Request.Context(), userID); err != nil {
+		switch {
+		case errors.Is(err, ErrNotInCouple):
+			c.JSON(http.StatusNotFound, gin.H{"error": "user is not part of a couple"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) invite(c *gin.Context) {
