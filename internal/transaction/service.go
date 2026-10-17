@@ -58,6 +58,39 @@ func (s *Service) Create(ctx context.Context, userID string, input *CreateInput)
 	return tx, false, nil
 }
 
+// List returns transactions for the given month, applying filters.
+// If input.UserID is set and differs from the caller, both must be in the same couple.
+func (s *Service) List(ctx context.Context, callerID string, input ListInput) ([]Transaction, error) {
+	if input.Year == 0 || input.Month == 0 {
+		return nil, &ValidationError{Field: "year/month", Message: "year and month are required"}
+	}
+	if input.Month < 1 || input.Month > 12 {
+		return nil, &ValidationError{Field: "month", Message: "must be between 1 and 12"}
+	}
+	if input.Direction != nil && *input.Direction != "in" && *input.Direction != "out" {
+		return nil, &ValidationError{Field: "direction", Message: `must be "in" or "out"`}
+	}
+
+	targetID := callerID
+	if input.UserID != nil && *input.UserID != callerID {
+		same, err := s.repo.sameCouple(ctx, callerID, *input.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("transaction.service.List: %w", err)
+		}
+		if !same {
+			return nil, ErrForbidden
+		}
+		targetID = *input.UserID
+	}
+
+	input.UserID = nil // already resolved into targetID
+	txs, err := s.repo.list(ctx, targetID, &input)
+	if err != nil {
+		return nil, fmt.Errorf("transaction.service.List: %w", err)
+	}
+	return txs, nil
+}
+
 func (s *Service) validate(input *CreateInput) error {
 	if input.Amount <= 0 {
 		return &ValidationError{Field: "amount", Message: "must be greater than zero"}

@@ -240,3 +240,132 @@ type mockSvc struct{ err error }
 func (m *mockSvc) Create(_ context.Context, _ string, _ *transaction.CreateInput) (transaction.Transaction, bool, error) {
 	return transaction.Transaction{}, false, m.err
 }
+
+func (m *mockSvc) List(_ context.Context, _ string, _ transaction.ListInput) ([]transaction.Transaction, error) {
+	return nil, m.err
+}
+
+// --- GET /transactions ---
+
+func TestIntegration_ListTransactions(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	t.Run("returns empty array when no transactions", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "list_empty@test.com", "Senha123")
+		w := req(t, r, http.MethodGet, "/v1/transactions?year=2026&month=10", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Empty(t, resp)
+	})
+
+	t.Run("returns own transactions for the month", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "list_own@test.com", "Senha123")
+
+		req1 := req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441001","amount":50,"direction":"out","date":"2026-10-05"}`,
+			token)
+		require.Equal(t, http.StatusCreated, req1.Code)
+
+		// different month — should not appear
+		req2 := req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441002","amount":20,"direction":"in","date":"2026-09-01"}`,
+			token)
+		require.Equal(t, http.StatusCreated, req2.Code)
+
+		w := req(t, r, http.MethodGet, "/v1/transactions?year=2026&month=10", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Len(t, resp, 1)
+	})
+
+	t.Run("filter by direction", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "list_dir@test.com", "Senha123")
+
+		req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441003","amount":10,"direction":"in","date":"2026-10-01"}`,
+			token)
+		req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441004","amount":20,"direction":"out","date":"2026-10-02"}`,
+			token)
+
+		w := req(t, r, http.MethodGet, "/v1/transactions?year=2026&month=10&direction=in", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Len(t, resp, 1)
+		assert.Equal(t, "in", resp[0]["direction"])
+	})
+
+	t.Run("access partner transactions in couple", func(t *testing.T) {
+		tokenA, userIDA := registerAndLogin(t, r, "list_coupleA@test.com", "Senha123")
+		tokenB, userIDB := registerAndLogin(t, r, "list_coupleB@test.com", "Senha123")
+		_ = userIDA
+
+		wInv := req(t, r, http.MethodPost, "/v1/couples/invite", "", tokenA)
+		require.Equal(t, http.StatusCreated, wInv.Code)
+		var inv map[string]any
+		require.NoError(t, json.Unmarshal(wInv.Body.Bytes(), &inv))
+		wJoin := req(t, r, http.MethodPost, "/v1/couples/join",
+			fmt.Sprintf(`{"code":%q}`, inv["code"]), tokenB)
+		require.Equal(t, http.StatusOK, wJoin.Code)
+
+		// B creates a transaction
+		req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441005","amount":75,"direction":"out","date":"2026-10-10"}`,
+			tokenB)
+
+		// A queries B's transactions
+		w := req(t, r, http.MethodGet,
+			fmt.Sprintf("/v1/transactions?year=2026&month=10&user_id=%s", userIDB), "", tokenA)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Len(t, resp, 1)
+		assert.Equal(t, userIDB, resp[0]["user_id"])
+	})
+
+	t.Run("access transactions of unrelated user returns 403", func(t *testing.T) {
+		tokenA, _ := registerAndLogin(t, r, "list_403A@test.com", "Senha123")
+		_, userIDB := registerAndLogin(t, r, "list_403B@test.com", "Senha123")
+
+		w := req(t, r, http.MethodGet,
+			fmt.Sprintf("/v1/transactions?year=2026&month=10&user_id=%s", userIDB), "", tokenA)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("missing year returns 422", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "list_noyear@test.com", "Senha123")
+		w := req(t, r, http.MethodGet, "/v1/transactions?month=10", "", token)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
+
+	t.Run("missing month returns 422", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "list_nomonth@test.com", "Senha123")
+		w := req(t, r, http.MethodGet, "/v1/transactions?year=2026", "", token)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
+
+	t.Run("without token returns 401", func(t *testing.T) {
+		w := req(t, r, http.MethodGet, "/v1/transactions?year=2026&month=10", "", "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+func TestHandler_List_InternalError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("user_id", "user-test"); c.Next() })
+	h := transaction.NewHandlerWithService(&mockSvc{err: fmt.Errorf("unexpected")})
+	h.RegisterRoutes(r.Group("/v1"))
+
+	httpReq := httptest.NewRequestWithContext(context.Background(),
+		http.MethodGet, "/v1/transactions?year=2026&month=10", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httpReq)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "internal server error")
+}

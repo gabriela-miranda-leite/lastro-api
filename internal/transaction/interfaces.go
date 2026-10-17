@@ -8,4 +8,7 @@ type repository interface {
 	categoryOwner(ctx context.Context, categoryID string) (ownerID string, owned bool, err error)
 	insert(ctx context.Context, userID string, input *CreateInput) (Transaction, error)
 	userHasCouple(ctx context.Context, userID string) (bool, error)
+	// sameCouple returns true when both users belong to the same couple.
+	sameCouple(ctx context.Context, userIDA, userIDB string) (bool, error)
+	list(ctx context.Context, userID string, input *ListInput) ([]Transaction, error)
 }

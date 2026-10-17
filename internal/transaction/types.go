@@ -7,6 +7,7 @@ var (
 	ErrSharedWithoutCouple = errorSentinel("is_shared requires couple")
 	ErrCategoryForbidden   = errorSentinel("category belongs to another user")
 	ErrNotFound            = errorSentinel("not found")
+	ErrForbidden           = errorSentinel("forbidden")
 )
 
 type errorSentinel string
@@ -37,6 +38,15 @@ type Transaction struct {
 	Date        string    `json:"date"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// ListInput holds the query params for GET /transactions.
+type ListInput struct {
+	Year       int
+	Month      int
+	CategoryID *string
+	Direction  *string
+	UserID     *string // if set, list transactions of this user (partner check required)
 }
 
 // ValidationError carries a field-level validation failure.

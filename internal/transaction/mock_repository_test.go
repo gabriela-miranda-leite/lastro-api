@@ -7,6 +7,8 @@ type mockRepository struct {
 	categoryOwnerFn  func(ctx context.Context, categoryID string) (string, bool, error)
 	insertFn         func(ctx context.Context, userID string, input *CreateInput) (Transaction, error)
 	userHasCoupleFn  func(ctx context.Context, userID string) (bool, error)
+	sameCoupleFn     func(ctx context.Context, userIDA, userIDB string) (bool, error)
+	listFn           func(ctx context.Context, userID string, input *ListInput) ([]Transaction, error)
 }
 
 func (m *mockRepository) findByClientID(ctx context.Context, clientID string) (Transaction, error) {
@@ -43,4 +45,18 @@ func (m *mockRepository) userHasCouple(ctx context.Context, userID string) (bool
 		return m.userHasCoupleFn(ctx, userID)
 	}
 	return false, nil
+}
+
+func (m *mockRepository) sameCouple(ctx context.Context, userIDA, userIDB string) (bool, error) {
+	if m.sameCoupleFn != nil {
+		return m.sameCoupleFn(ctx, userIDA, userIDB)
+	}
+	return false, nil
+}
+
+func (m *mockRepository) list(ctx context.Context, userID string, input *ListInput) ([]Transaction, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx, userID, input)
+	}
+	return []Transaction{}, nil
 }
