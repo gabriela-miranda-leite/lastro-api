@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var ErrNotFound = errors.New("not found")
+var ErrNoFieldsToUpdate = errors.New("no fields to update")
 
 // Repository handles data access for the user domain.
 type Repository struct {
@@ -57,4 +59,51 @@ func (r *Repository) findByID(ctx context.Context, userID string) (MeResponse, e
 	}
 
 	return me, nil
+}
+
+func (r *Repository) update(ctx context.Context, userID string, input UpdateInput) error {
+	setClauses := make([]string, 0, 3)
+	args := make([]any, 0, 4)
+	idx := 1
+
+	if input.Name != nil {
+		setClauses = append(setClauses, fmt.Sprintf("name = $%d", idx))
+		args = append(args, *input.Name)
+		idx++
+	}
+	if input.MonthlyIncome != nil {
+		setClauses = append(setClauses, fmt.Sprintf("monthly_income = $%d", idx))
+		args = append(args, *input.MonthlyIncome)
+		idx++
+	}
+	if input.SavingGoalPct != nil {
+		setClauses = append(setClauses, fmt.Sprintf("saving_goal_pct = $%d", idx))
+		args = append(args, *input.SavingGoalPct)
+		idx++
+	}
+
+	if len(setClauses) == 0 {
+		return ErrNoFieldsToUpdate
+	}
+
+	args = append(args, userID)
+	q := fmt.Sprintf(
+		"UPDATE users SET %s WHERE id = $%d AND deleted_at IS NULL",
+		strings.Join(setClauses, ", "), idx,
+	)
+
+	res, err := r.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("user.repository.update: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("user.repository.update: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+
+	return nil
 }
