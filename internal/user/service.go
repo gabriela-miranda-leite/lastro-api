@@ -9,7 +9,7 @@ import (
 
 // Service contains business logic for the user domain.
 type Service struct {
-	repo *Repository
+	repo repository
 }
 
 // NewService creates a new Service.
