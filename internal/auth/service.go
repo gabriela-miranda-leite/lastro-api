@@ -144,6 +144,16 @@ func (s *Service) Refresh(ctx context.Context, rawToken string) (AuthResponse, e
 	}, nil
 }
 
+func (s *Service) Logout(ctx context.Context, userID, rawToken string) error {
+	sum := sha256.Sum256([]byte(rawToken))
+	tokenHash := hex.EncodeToString(sum[:])
+
+	if err := s.repo.revokeRefreshTokenByHash(ctx, userID, tokenHash); err != nil {
+		return fmt.Errorf("auth.service.Logout: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) generateAccessToken(userID string) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": userID,

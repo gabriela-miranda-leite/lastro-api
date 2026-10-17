@@ -17,11 +17,16 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-// RegisterRoutes registers routes on the given router group.
+// RegisterRoutes registers public auth routes on the given router group.
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/register", h.register)
 	rg.POST("/login", h.login)
 	rg.POST("/refresh", h.refresh)
+}
+
+// RegisterProtectedRoutes registers auth routes that require a valid JWT.
+func (h *Handler) RegisterProtectedRoutes(rg *gin.RouterGroup) {
+	rg.POST("/auth/logout", h.logout)
 }
 
 func (h *Handler) login(c *gin.Context) {
@@ -66,6 +71,22 @@ func (h *Handler) refresh(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) logout(c *gin.Context) {
+	var input LogoutInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	if err := h.service.Logout(c.Request.Context(), userID, input.RefreshToken); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) register(c *gin.Context) {

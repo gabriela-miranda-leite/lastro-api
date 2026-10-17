@@ -47,6 +47,7 @@ func main() {
 
 	protected := v1.Group("/")
 	protected.Use(middleware.Auth(database, cfg.JWTSecret))
+	authHandler.RegisterProtectedRoutes(protected)
 
 	slog.Info("starting lastro-api", "port", cfg.Port, "env", cfg.Env)
 	if err := r.Run(":" + cfg.Port); err != nil {
