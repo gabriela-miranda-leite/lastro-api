@@ -58,6 +58,21 @@ func (s *Service) Create(ctx context.Context, userID string, input *CreateInput)
 	return tx, false, nil
 }
 
+// Delete soft-deletes a transaction and writes an audit log entry.
+func (s *Service) Delete(ctx context.Context, userID, id string) error {
+	tx, err := s.repo.findByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("transaction.service.Delete: %w", err)
+	}
+	if tx.UserID != userID {
+		return ErrForbidden
+	}
+	if err := s.repo.softDelete(ctx, &tx, userID); err != nil {
+		return fmt.Errorf("transaction.service.Delete: %w", err)
+	}
+	return nil
+}
+
 // Update edits an existing transaction. Only the owner may edit.
 func (s *Service) Update(ctx context.Context, userID, id string, input UpdateInput) (Transaction, error) {
 	if input.Amount != nil && *input.Amount <= 0 {

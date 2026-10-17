@@ -249,6 +249,10 @@ func (m *mockSvc) Update(_ context.Context, _, _ string, _ transaction.UpdateInp
 	return transaction.Transaction{}, m.err
 }
 
+func (m *mockSvc) Delete(_ context.Context, _, _ string) error {
+	return m.err
+}
+
 // --- GET /transactions ---
 
 func TestIntegration_ListTransactions(t *testing.T) {
@@ -455,6 +459,100 @@ func TestHandler_Update_InternalError(t *testing.T) {
 		http.MethodPut, "/v1/transactions/some-id",
 		strings.NewReader(`{"amount":10}`))
 	httpReq.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httpReq)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "internal server error")
+}
+
+// --- DELETE /transactions/:id ---
+
+func TestIntegration_DeleteTransaction(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	t.Run("owner deletes returns 204 and transaction disappears from list", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "del_ok@test.com", "Senha123")
+
+		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655443001","amount":80,"direction":"out","date":"2026-10-05"}`,
+			token)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		wDel := req(t, r, http.MethodDelete, "/v1/transactions/"+id, "", token)
+		assert.Equal(t, http.StatusNoContent, wDel.Code)
+
+		wList := req(t, r, http.MethodGet, "/v1/transactions?year=2026&month=10", "", token)
+		require.Equal(t, http.StatusOK, wList.Code)
+		var list []any
+		require.NoError(t, json.Unmarshal(wList.Body.Bytes(), &list))
+		assert.Empty(t, list)
+	})
+
+	t.Run("audit_log entry is created on delete", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "del_audit@test.com", "Senha123")
+
+		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655443002","amount":120,"direction":"in","date":"2026-10-10"}`,
+			token)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		wDel := req(t, r, http.MethodDelete, "/v1/transactions/"+id, "", token)
+		require.Equal(t, http.StatusNoContent, wDel.Code)
+
+		var count int
+		err := db.QueryRowContext(context.Background(),
+			`SELECT COUNT(*) FROM audit_log WHERE entity = 'transaction' AND entity_id = $1 AND action = 'delete'`,
+			id,
+		).Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 1, count)
+	})
+
+	t.Run("non-owner gets 403", func(t *testing.T) {
+		tokenA, _ := registerAndLogin(t, r, "del_ownerA@test.com", "Senha123")
+		tokenB, _ := registerAndLogin(t, r, "del_ownerB@test.com", "Senha123")
+
+		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
+			`{"client_id":"550e8400-e29b-41d4-a716-446655443003","amount":40,"direction":"out","date":"2026-10-01"}`,
+			tokenA)
+		require.Equal(t, http.StatusCreated, wCreate.Code)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := req(t, r, http.MethodDelete, "/v1/transactions/"+id, "", tokenB)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("unknown id returns 404", func(t *testing.T) {
+		token, _ := registerAndLogin(t, r, "del_404@test.com", "Senha123")
+		w := req(t, r, http.MethodDelete, "/v1/transactions/00000000-0000-0000-0000-000000000000", "", token)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("without token returns 401", func(t *testing.T) {
+		w := req(t, r, http.MethodDelete, "/v1/transactions/some-id", "", "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+func TestHandler_Delete_InternalError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("user_id", "user-test"); c.Next() })
+	h := transaction.NewHandlerWithService(&mockSvc{err: fmt.Errorf("unexpected")})
+	h.RegisterRoutes(r.Group("/v1"))
+
+	httpReq := httptest.NewRequestWithContext(context.Background(),
+		http.MethodDelete, "/v1/transactions/some-id", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httpReq)
 

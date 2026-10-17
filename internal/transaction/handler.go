@@ -13,6 +13,7 @@ type transactionService interface {
 	Create(ctx context.Context, userID string, input *CreateInput) (Transaction, bool, error)
 	List(ctx context.Context, callerID string, input ListInput) ([]Transaction, error)
 	Update(ctx context.Context, userID, id string, input UpdateInput) (Transaction, error)
+	Delete(ctx context.Context, userID, id string) error
 }
 
 // Handler handles HTTP requests for the transaction domain.
@@ -35,6 +36,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/transactions", h.create)
 	rg.GET("/transactions", h.list)
 	rg.PUT("/transactions/:id", h.update)
+	rg.DELETE("/transactions/:id", h.delete)
 }
 
 func (h *Handler) create(c *gin.Context) {
@@ -147,4 +149,23 @@ func (h *Handler) update(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, tx)
+}
+
+func (h *Handler) delete(c *gin.Context) {
+	id := c.Param("id")
+	userID := c.GetString("user_id")
+
+	err := h.service.Delete(c.Request.Context(), userID, id)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "transaction not found"})
+		case errors.Is(err, ErrForbidden):
+			c.JSON(http.StatusForbidden, gin.H{"error": "not the owner of this transaction"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

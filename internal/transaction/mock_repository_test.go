@@ -11,6 +11,7 @@ type mockRepository struct {
 	listFn           func(ctx context.Context, userID string, input *ListInput) ([]Transaction, error)
 	findByIDFn       func(ctx context.Context, id string) (Transaction, error)
 	updateFn         func(ctx context.Context, id, userID string, input *UpdateInput) (Transaction, error)
+	softDeleteFn     func(ctx context.Context, tx *Transaction, deletedByUserID string) error
 }
 
 func (m *mockRepository) findByClientID(ctx context.Context, clientID string) (Transaction, error) {
@@ -75,4 +76,11 @@ func (m *mockRepository) update(ctx context.Context, id, userID string, input *U
 		return m.updateFn(ctx, id, userID, input)
 	}
 	return Transaction{ID: id, UserID: userID}, nil
+}
+
+func (m *mockRepository) softDelete(ctx context.Context, tx *Transaction, deletedByUserID string) error {
+	if m.softDeleteFn != nil {
+		return m.softDeleteFn(ctx, tx, deletedByUserID)
+	}
+	return nil
 }
