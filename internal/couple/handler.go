@@ -1,20 +1,32 @@
 package couple
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
+type coupleService interface {
+	Invite(ctx context.Context, userID string) (InviteResponse, error)
+	Join(ctx context.Context, joinerID, code string) (JoinResponse, error)
+	Unlink(ctx context.Context, userID string) error
+}
+
 // Handler handles HTTP requests for the couple domain.
 type Handler struct {
-	service *Service
+	service coupleService
 }
 
 // NewHandler creates a new Handler.
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
+}
+
+// NewHandlerWithService creates a Handler from any coupleService — used in tests.
+func NewHandlerWithService(svc coupleService) *Handler {
+	return &Handler{service: svc}
 }
 
 // RegisterRoutes registers routes on the given router group.
