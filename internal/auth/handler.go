@@ -27,6 +27,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 // RegisterProtectedRoutes registers auth routes that require a valid JWT.
 func (h *Handler) RegisterProtectedRoutes(rg *gin.RouterGroup) {
 	rg.POST("/auth/logout", h.logout)
+	rg.POST("/auth/logout/all", h.logoutAll)
 }
 
 func (h *Handler) login(c *gin.Context) {
@@ -86,6 +87,15 @@ func (h *Handler) logout(c *gin.Context) {
 		return
 	}
 
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) logoutAll(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if err := h.service.LogoutAll(c.Request.Context(), userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
 	c.Status(http.StatusNoContent)
 }
 

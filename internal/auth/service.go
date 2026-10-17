@@ -154,6 +154,13 @@ func (s *Service) Logout(ctx context.Context, userID, rawToken string) error {
 	return nil
 }
 
+func (s *Service) LogoutAll(ctx context.Context, userID string) error {
+	if err := s.repo.revokeAllUserTokens(ctx, userID); err != nil {
+		return fmt.Errorf("auth.service.LogoutAll: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) generateAccessToken(userID string) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": userID,

@@ -43,7 +43,10 @@ func main() {
 
 	authHandler := auth.NewHandler(auth.NewService(auth.NewRepository(database), cfg.JWTSecret))
 	v1 := r.Group("/v1")
-	authHandler.RegisterRoutes(v1.Group("/auth"))
+
+	authGroup := v1.Group("/auth")
+	authGroup.Use(middleware.RateLimit("5-M"))
+	authHandler.RegisterRoutes(authGroup)
 
 	protected := v1.Group("/")
 	protected.Use(middleware.Auth(database, cfg.JWTSecret))
