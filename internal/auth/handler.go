@@ -21,6 +21,7 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/register", h.register)
 	rg.POST("/login", h.login)
+	rg.POST("/refresh", h.refresh)
 }
 
 func (h *Handler) login(c *gin.Context) {
@@ -34,6 +35,30 @@ func (h *Handler) login(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handler) refresh(c *gin.Context) {
+	var input RefreshInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := h.service.Refresh(c.Request.Context(), input.RefreshToken)
+	if err != nil {
+		if errors.Is(err, ErrTokenNotFound) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
+			return
+		}
+		if errors.Is(err, ErrInvalidCredentials) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired refresh token"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})

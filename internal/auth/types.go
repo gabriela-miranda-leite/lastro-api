@@ -26,3 +26,8 @@ type AuthResponse struct {
 	AccessToken  string       `json:"access_token"`
 	RefreshToken string       `json:"refresh_token"`
 }
+
+// RefreshInput is the request body for POST /auth/refresh.
+type RefreshInput struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}

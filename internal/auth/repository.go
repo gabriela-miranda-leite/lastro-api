@@ -15,6 +15,12 @@ var ErrEmailConflict = errors.New("email already in use")
 // ErrInvalidCredentials is returned when email or password don't match.
 var ErrInvalidCredentials = errors.New("invalid credentials")
 
+// ErrTokenNotFound is returned when the refresh token is not found or already expired.
+var ErrTokenNotFound = errors.New("refresh token not found or expired")
+
+// ErrTokenRevoked is returned when the refresh token was already revoked (reuse detected).
+var ErrTokenRevoked = errors.New("refresh token already revoked")
+
 // Repository handles data access for the auth domain.
 type Repository struct {
 	db *sql.DB
@@ -68,6 +74,63 @@ func (r *Repository) saveRefreshToken(ctx context.Context, userID, tokenHash str
 	}
 
 	return nil
+}
+
+type refreshTokenRow struct {
+	ID     string
+	UserID string
+}
+
+// findRefreshToken looks up a non-expired, non-revoked token by its hash.
+// Returns ErrTokenRevoked if found but revoked, ErrTokenNotFound if absent or expired.
+func (r *Repository) findRefreshToken(ctx context.Context, tokenHash string) (refreshTokenRow, error) {
+	const q = `
+		SELECT id, user_id, revoked_at
+		FROM refresh_tokens
+		WHERE token_hash = $1 AND expires_at > now()`
+
+	var row refreshTokenRow
+	var revokedAt sql.NullTime
+	err := r.db.QueryRowContext(ctx, q, tokenHash).Scan(&row.ID, &row.UserID, &revokedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return refreshTokenRow{}, ErrTokenNotFound
+		}
+		return refreshTokenRow{}, fmt.Errorf("auth.repository.findRefreshToken: %w", err)
+	}
+	if revokedAt.Valid {
+		return refreshTokenRow{}, ErrTokenRevoked
+	}
+	return row, nil
+}
+
+func (r *Repository) revokeRefreshToken(ctx context.Context, tokenID string) error {
+	const q = `UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1`
+	if _, err := r.db.ExecContext(ctx, q, tokenID); err != nil {
+		return fmt.Errorf("auth.repository.revokeRefreshToken: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) revokeAllUserTokens(ctx context.Context, userID string) error {
+	const q = `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`
+	if _, err := r.db.ExecContext(ctx, q, userID); err != nil {
+		return fmt.Errorf("auth.repository.revokeAllUserTokens: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) findUserByID(ctx context.Context, userID string) (userRow, error) {
+	const q = `SELECT id, name, email FROM users WHERE id = $1 AND deleted_at IS NULL`
+	var row userRow
+	err := r.db.QueryRowContext(ctx, q, userID).Scan(&row.ID, &row.Name, &row.Email)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return userRow{}, ErrInvalidCredentials
+		}
+		return userRow{}, fmt.Errorf("auth.repository.findUserByID: %w", err)
+	}
+	return row, nil
 }
 
 type loginUserRow struct {
