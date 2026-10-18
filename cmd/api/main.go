@@ -6,9 +6,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+
+	"github.com/robfig/cron/v3"
 
 	"github.com/gabriela-miranda-leite/lastro-api/config"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/auth"
@@ -18,6 +21,7 @@ import (
 	"github.com/gabriela-miranda-leite/lastro-api/internal/middleware"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/purge"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/recurring"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/recurringjob"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/transaction"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/user"
 )
@@ -72,6 +76,19 @@ func main() {
 	recurringHandler := recurring.NewHandler(recurring.NewService(recurring.NewRepository(database)))
 	recurringHandler.RegisterRoutes(protected)
 
+	// job de geração automática de fixos — roda às 00:00 de todo dia 1 (horário de Brasília)
+	brasilia, err := time.LoadLocation("America/Fortaleza")
+	if err != nil {
+		slog.Error("failed to load timezone", "error", err)
+		os.Exit(1)
+	}
+	c := cron.New(cron.WithLocation(brasilia))
+	if _, err := c.AddFunc("0 0 1 * *", recurringjob.New(database).RunForCurrentMonth); err != nil {
+		slog.Error("failed to register recurring job", "error", err)
+		os.Exit(1)
+	}
+	c.Start()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
@@ -82,8 +99,10 @@ func main() {
 	slog.Info("starting lastro-api", "port", cfg.Port, "env", cfg.Env)
 	if err := r.Run(":" + cfg.Port); err != nil {
 		stop()
+		c.Stop()
 		slog.Error("server error", "error", err)
 		_ = database.Close()
 		os.Exit(1)
 	}
+	c.Stop()
 }
