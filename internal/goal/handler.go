@@ -3,12 +3,14 @@ package goal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 type goalService interface {
+	List(ctx context.Context, userID string, input ListInput) ([]GoalWithStatus, error)
 	Create(ctx context.Context, userID string, input CreateInput) (Goal, error)
 }
 
@@ -29,7 +31,44 @@ func NewHandlerWithService(svc goalService) *Handler {
 
 // RegisterRoutes registers routes on the given router group.
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
+	rg.GET("/goals", h.list)
 	rg.POST("/goals", h.create)
+}
+
+func (h *Handler) list(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	var input ListInput
+	if yearStr := c.Query("year"); yearStr != "" {
+		var year int
+		if _, err := fmt.Sscanf(yearStr, "%d", &year); err != nil || year <= 0 {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid year", "field": "year"})
+			return
+		}
+		input.Year = &year
+	}
+	if monthStr := c.Query("month"); monthStr != "" {
+		if input.Year == nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "month requires year", "field": "month"})
+			return
+		}
+		var month int
+		if _, err := fmt.Sscanf(monthStr, "%d", &month); err != nil || month < 1 || month > 12 {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid month", "field": "month"})
+			return
+		}
+		input.Month = &month
+	}
+
+	goals, err := h.service.List(c.Request.Context(), userID, input)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+	if goals == nil {
+		goals = []GoalWithStatus{}
+	}
+	c.JSON(http.StatusOK, goals)
 }
 
 func (h *Handler) create(c *gin.Context) {

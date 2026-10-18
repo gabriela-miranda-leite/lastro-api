@@ -29,6 +29,18 @@ type CreateInput struct {
 	GoalAmount float64 `json:"goal_amount"  binding:"required"`
 }
 
+// GoalWithStatus is a Goal enriched with a calculated status field.
+type GoalWithStatus struct {
+	Goal
+	Status string `json:"status"` // "under" | "met" | "over"
+}
+
+// ListInput holds optional filters for GET /goals.
+type ListInput struct {
+	Year  *int
+	Month *int
+}
+
 // ValidationError carries a field-level validation failure.
 type ValidationError struct {
 	Field   string
