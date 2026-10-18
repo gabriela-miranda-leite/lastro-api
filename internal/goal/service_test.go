@@ -60,6 +60,59 @@ func TestService_Create_Conflict(t *testing.T) {
 	assert.ErrorIs(t, err, ErrConflict)
 }
 
+// --- calcStatus ---
+
+func TestCalcStatus_Under(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		listFn: func(_ context.Context, _ string, _ *ListInput) ([]Goal, error) {
+			return []Goal{{GoalAmount: "1000.00", SavedAmount: "500.00"}}, nil
+		},
+	}}
+	goals, err := svc.List(context.Background(), "user-1", ListInput{})
+	require.NoError(t, err)
+	assert.Equal(t, "under", goals[0].Status)
+}
+
+func TestCalcStatus_Met(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		listFn: func(_ context.Context, _ string, _ *ListInput) ([]Goal, error) {
+			return []Goal{{GoalAmount: "1000.00", SavedAmount: "1000.00"}}, nil
+		},
+	}}
+	goals, err := svc.List(context.Background(), "user-1", ListInput{})
+	require.NoError(t, err)
+	assert.Equal(t, "met", goals[0].Status)
+}
+
+func TestCalcStatus_Over(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		listFn: func(_ context.Context, _ string, _ *ListInput) ([]Goal, error) {
+			return []Goal{{GoalAmount: "500.00", SavedAmount: "1000.00"}}, nil
+		},
+	}}
+	goals, err := svc.List(context.Background(), "user-1", ListInput{})
+	require.NoError(t, err)
+	assert.Equal(t, "over", goals[0].Status)
+}
+
+func TestService_List_Empty(t *testing.T) {
+	svc := &Service{repo: &mockRepository{}}
+	goals, err := svc.List(context.Background(), "user-1", ListInput{})
+	require.NoError(t, err)
+	assert.Empty(t, goals)
+}
+
+func TestService_List_RepoError(t *testing.T) {
+	svc := &Service{repo: &mockRepository{
+		listFn: func(_ context.Context, _ string, _ *ListInput) ([]Goal, error) {
+			return nil, errors.New("db error")
+		},
+	}}
+	_, err := svc.List(context.Background(), "user-1", ListInput{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db error")
+}
+
 func TestService_Create_RepoError(t *testing.T) {
 	svc := &Service{repo: &mockRepository{
 		insertFn: func(_ context.Context, _ string, _ *CreateInput) (Goal, error) {

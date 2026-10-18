@@ -125,7 +125,76 @@ func TestIntegration_Goal(t *testing.T) {
 
 // --- Handler unit test for 500 path ---
 
+// --- GET /goals integration ---
+
+func TestIntegration_Goal_List(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	t.Run("GET returns empty array when no goals", func(t *testing.T) {
+		token := registerAndLogin(t, r, "list_empty@test.com", "Senha123")
+		w := doReq(t, r, http.MethodGet, "/v1/goals", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Empty(t, resp)
+	})
+
+	t.Run("GET returns goals with status", func(t *testing.T) {
+		token := registerAndLogin(t, r, "list_goals@test.com", "Senha123")
+		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
+		w := doReq(t, r, http.MethodGet, "/v1/goals", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp, 1)
+		assert.Equal(t, "under", resp[0]["status"])
+		assert.Equal(t, "1000.00", resp[0]["goal_amount"])
+	})
+
+	t.Run("GET with year filter", func(t *testing.T) {
+		token := registerAndLogin(t, r, "list_year@test.com", "Senha123")
+		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2025,"month":1,"goal_amount":500}`, token)
+		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":1,"goal_amount":800}`, token)
+		w := doReq(t, r, http.MethodGet, "/v1/goals?year=2026", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp, 1)
+		assert.Equal(t, float64(2026), resp[0]["year"])
+	})
+
+	t.Run("GET with year+month filter", func(t *testing.T) {
+		token := registerAndLogin(t, r, "list_ym@test.com", "Senha123")
+		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":5,"goal_amount":500}`, token)
+		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":6,"goal_amount":600}`, token)
+		w := doReq(t, r, http.MethodGet, "/v1/goals?year=2026&month=5", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp, 1)
+		assert.Equal(t, float64(5), resp[0]["month"])
+	})
+
+	t.Run("GET month without year returns 422", func(t *testing.T) {
+		token := registerAndLogin(t, r, "list_noyr@test.com", "Senha123")
+		w := doReq(t, r, http.MethodGet, "/v1/goals?month=5", "", token)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
+
+	t.Run("GET without token returns 401", func(t *testing.T) {
+		w := doReq(t, r, http.MethodGet, "/v1/goals", "", "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+// --- Handler unit tests ---
+
 type mockSvc struct{ err error }
+
+func (m *mockSvc) List(_ context.Context, _ string, _ goal.ListInput) ([]goal.GoalWithStatus, error) {
+	return []goal.GoalWithStatus{}, m.err
+}
 
 func (m *mockSvc) Create(_ context.Context, _ string, _ goal.CreateInput) (goal.Goal, error) {
 	return goal.Goal{}, m.err
