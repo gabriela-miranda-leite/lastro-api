@@ -2,7 +2,7 @@ BINARY=lastro-api
 MAIN=./cmd/api/main.go
 MIGRATE=migrate -path db/migrations -database "$(DATABASE_URL)"
 
-.PHONY: build run test lint migrate-up migrate-down swagger load-test load-test-dashboard load-test-transactions load-test-idempotency
+.PHONY: build run test lint migrate-up migrate-down swagger coverage load-test load-test-dashboard load-test-transactions load-test-idempotency
 
 build:
 	go build -o bin/$(BINARY) $(MAIN)
@@ -24,6 +24,20 @@ migrate-down:
 
 swagger:
 	swag init -g cmd/api/main.go -o docs
+
+# coverage: run tests with coverage and fail if totals fall below minimums.
+# Global minimum: 75%. Service layer (packages with a service.go): 80%.
+coverage:
+	go test ./... -coverprofile=coverage.out -covermode=atomic
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "--- Coverage summary ---"; \
+	go tool cover -func=coverage.out | grep '^total:'; \
+	total=$$(go tool cover -func=coverage.out | grep '^total:' | awk '{gsub(/%/,""); print $$3}'); \
+	echo "Global total: $${total}%"; \
+	if awk "BEGIN{exit !($${total}+0 < 75)}"; then \
+	  echo "FAIL: global coverage $${total}% is below 75%"; exit 1; \
+	fi; \
+	echo "Global threshold OK (≥75%)."
 
 load-test: load-test-dashboard load-test-transactions load-test-idempotency
 
