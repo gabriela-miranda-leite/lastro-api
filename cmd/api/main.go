@@ -17,6 +17,7 @@ import (
 	"github.com/gabriela-miranda-leite/lastro-api/internal/auth"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/couple"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/db"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/goal"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/health"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/middleware"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/purge"
@@ -75,6 +76,9 @@ func main() {
 
 	recurringHandler := recurring.NewHandler(recurring.NewService(recurring.NewRepository(database)))
 	recurringHandler.RegisterRoutes(protected)
+
+	goalHandler := goal.NewHandler(goal.NewService(goal.NewRepository(database)))
+	goalHandler.RegisterRoutes(protected)
 
 	// job de geração automática de fixos — roda às 00:00 de todo dia 1 (horário de Brasília)
 	brasilia, err := time.LoadLocation("America/Fortaleza")
