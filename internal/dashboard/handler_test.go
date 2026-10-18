@@ -59,21 +59,21 @@ func doReq(t *testing.T, r *gin.Engine, method, path, body, token string) *httpt
 
 func uniqueEmail(t *testing.T, label string) string {
 	t.Helper()
-	h := fmt.Sprintf("%x", md5.Sum([]byte(t.Name()+label))) //nolint:gosec
+	h := fmt.Sprintf("%x", md5.Sum([]byte(t.Name()+label))) //nolint:gosec // md5 used for uniqueness, not security
 	return h[:12] + "@test.com"
 }
 
 // registerAndLogin returns (token, userID).
-func registerAndLogin(t *testing.T, r *gin.Engine, email, password string) (string, string) {
+func registerAndLogin(t *testing.T, r *gin.Engine, email, password string) (token, userID string) {
 	t.Helper()
 	body := fmt.Sprintf(`{"name":"Test","email":%q,"password":%q}`, email, password)
 	w := doReq(t, r, http.MethodPost, "/v1/auth/register", body, "")
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	token := resp["access_token"].(string)
-	userID := resp["user"].(map[string]any)["id"].(string)
-	return token, userID
+	token = resp["access_token"].(string)
+	userID = resp["user"].(map[string]any)["id"].(string)
+	return
 }
 
 // insertCategory inserts a category directly in the DB and returns its ID.
