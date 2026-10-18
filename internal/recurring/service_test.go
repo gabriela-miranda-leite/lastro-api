@@ -281,3 +281,8 @@ func TestService_List_RepoError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "db error")
 }
+
+func TestValidationError_Error(t *testing.T) {
+	e := &ValidationError{Field: "due_day", Message: "must be 1-31"}
+	assert.Equal(t, "due_day: must be 1-31", e.Error())
+}

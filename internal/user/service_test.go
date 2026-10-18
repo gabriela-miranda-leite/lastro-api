@@ -210,3 +210,8 @@ func TestService_Export(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNotFound)
 	})
 }
+
+func TestValidationError_Error(t *testing.T) {
+	e := &ValidationError{Field: "name", Message: "cannot be empty"}
+	assert.Equal(t, "name: cannot be empty", e.Error())
+}

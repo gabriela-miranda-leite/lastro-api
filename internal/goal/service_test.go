@@ -178,3 +178,8 @@ func TestService_Update_RepoError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "db error")
 }
+
+func TestValidationError_Error(t *testing.T) {
+	e := &ValidationError{Field: "amount", Message: "must be positive"}
+	assert.Equal(t, "amount: must be positive", e.Error())
+}

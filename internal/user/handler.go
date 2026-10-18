@@ -1,15 +1,23 @@
 package user
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
+type userService interface {
+	Me(ctx context.Context, userID string) (MeResponse, error)
+	Export(ctx context.Context, userID, ip string) (ExportData, error)
+	Update(ctx context.Context, userID string, input UpdateInput) (MeResponse, error)
+	Delete(ctx context.Context, userID string, input DeleteInput) error
+}
+
 // Handler handles HTTP requests for the user domain.
 type Handler struct {
-	service *Service
+	service userService
 }
 
 // NewHandler creates a new Handler.
