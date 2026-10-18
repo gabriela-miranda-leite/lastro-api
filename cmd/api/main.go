@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/joho/godotenv"
 
 	"github.com/robfig/cron/v3"
@@ -41,6 +44,21 @@ func main() {
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+
+	driver, err := postgres.WithInstance(database, &postgres.Config{})
+	if err != nil {
+		slog.Error("failed to create migrate driver", "error", err)
+		os.Exit(1)
+	}
+	m, err := migrate.NewWithDatabaseInstance("file://db/migrations", "postgres", driver)
+	if err != nil {
+		slog.Error("failed to initialize migrations", "error", err)
+		os.Exit(1)
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		slog.Error("migration failed", "error", err)
 		os.Exit(1)
 	}
 

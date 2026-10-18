@@ -10,6 +10,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /lastro-api ./cmd/api/
 FROM gcr.io/distroless/static-debian12
 
 COPY --from=builder /lastro-api /lastro-api
+COPY --from=builder /app/db/migrations /db/migrations
 
 EXPOSE 8080
 
