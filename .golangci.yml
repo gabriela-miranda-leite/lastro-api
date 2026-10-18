@@ -72,5 +72,9 @@ issues:
       linters:
         - forbidigo
 
+    - path: "docs/.*\\.go"
+      linters:
+        - godot
+
   max-issues-per-linter: 0
   max-same-issues: 0

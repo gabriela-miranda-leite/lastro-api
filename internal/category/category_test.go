@@ -1,6 +1,7 @@
 package category_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -10,19 +11,26 @@ import (
 )
 
 func TestCategory_Constructors(t *testing.T) {
-	repo := category.NewRepository()
-	assert.NotNil(t, repo)
-
-	svc := category.NewService(repo)
-	assert.NotNil(t, svc)
-
-	h := category.NewHandler(svc)
+	svc := &mockService{}
+	h := category.NewHandlerWithService(svc)
 	assert.NotNil(t, h)
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	// RegisterRoutes is a no-op for now; must not panic
 	assert.NotPanics(t, func() {
 		h.RegisterRoutes(r.Group("/v1"))
 	})
 }
+
+type mockService struct{}
+
+func (m *mockService) List(_ context.Context, _ string) ([]category.Category, error) {
+	return nil, nil
+}
+func (m *mockService) Create(_ context.Context, _ string, _ category.CreateInput) (category.Category, error) {
+	return category.Category{}, nil
+}
+func (m *mockService) Update(_ context.Context, _, _ string, _ category.UpdateInput) (category.Category, error) {
+	return category.Category{}, nil
+}
+func (m *mockService) Delete(_ context.Context, _, _ string) error { return nil }

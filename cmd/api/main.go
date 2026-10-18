@@ -1,3 +1,14 @@
+// @title           Lastro API
+// @version         1.0
+// @description     Backend do Lastro — controle financeiro pessoal e de casal.
+// @host            lastro-api-8927.onrender.com
+// @BasePath        /
+// @schemes         https
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Formato: Bearer {token}
+
 package main
 
 import (
@@ -13,12 +24,16 @@ import (
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/joho/godotenv"
-
 	"github.com/robfig/cron/v3"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "github.com/gabriela-miranda-leite/lastro-api/docs"
 
 	"github.com/gabriela-miranda-leite/lastro-api/config"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/audit"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/auth"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/category"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/couple"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/dashboard"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/db"
@@ -73,6 +88,7 @@ func main() {
 	r.Use(gin.Recovery())
 
 	r.GET("/health", health.NewHandler(database).Check)
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	authHandler := auth.NewHandler(auth.NewService(auth.NewRepository(database), cfg.JWTSecret))
 	v1 := r.Group("/v1")
@@ -105,6 +121,9 @@ func main() {
 
 	auditHandler := audit.NewHandler(audit.NewService(audit.NewRepository(database)))
 	auditHandler.RegisterRoutes(protected)
+
+	categoryHandler := category.NewHandler(category.NewService(category.NewRepository(database)))
+	categoryHandler.RegisterRoutes(protected)
 
 	// job de geração automática de fixos — roda às 00:00 de todo dia 1 (horário de Brasília)
 	brasilia, err := time.LoadLocation("America/Fortaleza")

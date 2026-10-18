@@ -1,0 +1,17 @@
+basePath: /
+host: lastro-api-8927.onrender.com
+info:
+  contact: {}
+  description: Backend do Lastro — controle financeiro pessoal e de casal.
+  title: Lastro API
+  version: "1.0"
+paths: {}
+schemes:
+- https
+securityDefinitions:
+  BearerAuth:
+    description: 'Formato: Bearer {token}'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
