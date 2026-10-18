@@ -60,7 +60,7 @@ func main() {
 	v1 := r.Group("/v1")
 
 	authGroup := v1.Group("/auth")
-	authGroup.Use(middleware.RateLimit("5-M"))
+	authGroup.Use(middleware.RateLimit(cfg.AuthRateLimit))
 	authHandler.RegisterRoutes(authGroup)
 
 	protected := v1.Group("/")

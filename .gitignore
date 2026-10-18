@@ -1,1 +1,2 @@
 .env
+# load-tests/k6/reports/*.json  # reports are committed — see load-tests/k6/README.md
