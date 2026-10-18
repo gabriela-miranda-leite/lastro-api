@@ -110,6 +110,17 @@ func TestIntegration_GetMe(t *testing.T) {
 		w := req(t, r, http.MethodGet, "/v1/users/me", "", "")
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
+
+	t.Run("deleted user returns 404", func(t *testing.T) {
+		token, userID := registerAndLogin(t, r, "getme-deleted@test.com", "Senha123")
+		_, err := db.ExecContext(context.Background(),
+			`UPDATE users SET deleted_at = now() WHERE id = $1`, userID)
+		require.NoError(t, err)
+
+		w := req(t, r, http.MethodGet, "/v1/users/me", "", token)
+		// middleware blocks first — deleted user gets 401 from Auth middleware
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
 }
 
 // --- PUT /users/me ---

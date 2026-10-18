@@ -145,3 +145,68 @@ func TestService_Delete(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNotFound)
 	})
 }
+
+func TestService_Me(t *testing.T) {
+	t.Run("returns user profile", func(t *testing.T) {
+		repo := &mockRepository{
+			findByIDFn: func(_ context.Context, userID string) (MeResponse, error) {
+				return MeResponse{ID: userID, Name: "Test"}, nil
+			},
+		}
+		svc := &Service{repo: repo}
+
+		resp, err := svc.Me(context.Background(), "user-1")
+
+		require.NoError(t, err)
+		assert.Equal(t, "user-1", resp.ID)
+		assert.Equal(t, "Test", resp.Name)
+	})
+
+	t.Run("not found propagates ErrNotFound", func(t *testing.T) {
+		repo := &mockRepository{
+			findByIDFn: func(_ context.Context, _ string) (MeResponse, error) {
+				return MeResponse{}, ErrNotFound
+			},
+		}
+		svc := &Service{repo: repo}
+
+		_, err := svc.Me(context.Background(), "ghost")
+
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestService_Export(t *testing.T) {
+	t.Run("success returns export data and records audit log", func(t *testing.T) {
+		auditCalled := false
+		repo := &mockRepository{
+			buildExportFn: func(_ context.Context, userID string) (ExportData, error) {
+				return ExportData{User: exportUser{ID: userID}}, nil
+			},
+			insertAuditLogFn: func(_ context.Context, _, _, _ string) error {
+				auditCalled = true
+				return nil
+			},
+		}
+		svc := &Service{repo: repo}
+
+		data, err := svc.Export(context.Background(), "user-1", "127.0.0.1")
+
+		require.NoError(t, err)
+		assert.Equal(t, "user-1", data.User.ID)
+		assert.True(t, auditCalled)
+	})
+
+	t.Run("not found propagates ErrNotFound", func(t *testing.T) {
+		repo := &mockRepository{
+			buildExportFn: func(_ context.Context, _ string) (ExportData, error) {
+				return ExportData{}, ErrNotFound
+			},
+		}
+		svc := &Service{repo: repo}
+
+		_, err := svc.Export(context.Background(), "ghost", "127.0.0.1")
+
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+}
