@@ -56,6 +56,12 @@ jobs:
           go tool cover -func=coverage.out | tail -1
 
           TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}')
+          TOTAL_NUM=$(echo "$TOTAL" | tr -d '%')
+          if awk "BEGIN{exit !($TOTAL_NUM+0 < 75)}"; then
+            echo "FAIL: global coverage $TOTAL is below 75%"
+            exit 1
+          fi
+          echo "Coverage OK: $TOTAL (threshold 75%)"
           echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
 
           # build per-package table (exclude test helpers and main)
