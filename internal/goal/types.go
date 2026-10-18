@@ -3,8 +3,8 @@ package goal
 import "time"
 
 var (
-	ErrConflict = errorSentinel("conflict")
-	ErrNotFound = errorSentinel("not found")
+	ErrConflict  = errorSentinel("conflict")
+	ErrNotFound  = errorSentinel("not found")
 	ErrForbidden = errorSentinel("forbidden")
 )
 
