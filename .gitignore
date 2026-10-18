@@ -1,2 +1,4 @@
 .env
+.env.*
+!.env.example
 load-tests/k6/reports/*.json
