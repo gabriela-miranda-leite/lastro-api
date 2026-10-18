@@ -18,9 +18,17 @@ var targetPcts = map[string]string{
 // allTypes is the fixed order we always include in by_type, even with zero amounts.
 var allTypes = []string{"necessity", "leisure", "investment", "saving"}
 
+type dashboardRepo interface {
+	FetchUserInfo(ctx context.Context, userID string) (UserInfo, error)
+	FetchPartnerID(ctx context.Context, coupleID, userID string) (string, error)
+	FetchIncome(ctx context.Context, userID string, year, month int) (string, error)
+	FetchExpensesByType(ctx context.Context, userID string, year, month int) ([]TypeAmount, error)
+	FetchSavings(ctx context.Context, userID string, year, month int) (SavingsRow, bool, error)
+}
+
 // Service contains business logic for the dashboard domain.
 type Service struct {
-	repo *Repository
+	repo dashboardRepo
 }
 
 // NewService creates a new Service.
@@ -67,19 +75,19 @@ func (s *Service) Get(ctx context.Context, userID string, year, month int) (Resp
 func (s *Service) fetchPersonal(ctx context.Context, userID string, year, month int) (string, *ExpensesSummary, *SavingsSummary, error) {
 	income, err := s.repo.FetchIncome(ctx, userID, year, month)
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, nil, fmt.Errorf("dashboard.service.fetchPersonal: %w", err)
 	}
 
 	typeAmounts, err := s.repo.FetchExpensesByType(ctx, userID, year, month)
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, nil, fmt.Errorf("dashboard.service.fetchPersonal: %w", err)
 	}
 
 	expenses := buildExpenses(typeAmounts, income)
 
 	savingsRow, found, err := s.repo.FetchSavings(ctx, userID, year, month)
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, nil, fmt.Errorf("dashboard.service.fetchPersonal: %w", err)
 	}
 	var savings *SavingsSummary
 	if found {
@@ -92,20 +100,20 @@ func (s *Service) fetchPersonal(ctx context.Context, userID string, year, month 
 func (s *Service) buildCouple(ctx context.Context, userID, partnerID string, year, month int) (*CoupleSummary, error) {
 	userIncome, err := s.repo.FetchIncome(ctx, userID, year, month)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dashboard.service.buildCouple: %w", err)
 	}
 	partnerIncome, err := s.repo.FetchIncome(ctx, partnerID, year, month)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dashboard.service.buildCouple: %w", err)
 	}
 
 	userTypes, err := s.repo.FetchExpensesByType(ctx, userID, year, month)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dashboard.service.buildCouple: %w", err)
 	}
 	partnerTypes, err := s.repo.FetchExpensesByType(ctx, partnerID, year, month)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dashboard.service.buildCouple: %w", err)
 	}
 
 	combinedIncome := addAmounts(userIncome, partnerIncome)
