@@ -58,6 +58,39 @@ func (r *Repository) list(ctx context.Context, userID string, input *ListInput) 
 	return result, nil
 }
 
+func (r *Repository) findByID(ctx context.Context, id string) (Goal, error) {
+	var g Goal
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, user_id, year, month, goal_amount::text, saved_amount::text, created_at, updated_at
+		   FROM monthly_savings WHERE id = $1`, id,
+	).Scan(&g.ID, &g.UserID, &g.Year, &g.Month, &g.GoalAmount, &g.SavedAmount, &g.CreatedAt, &g.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Goal{}, ErrNotFound
+		}
+		return Goal{}, fmt.Errorf("goal.repository.findByID: %w", err)
+	}
+	return g, nil
+}
+
+func (r *Repository) update(ctx context.Context, id string, input *UpdateInput) (Goal, error) {
+	var g Goal
+	err := r.db.QueryRowContext(ctx,
+		`UPDATE monthly_savings
+		    SET saved_amount = $2, updated_at = now()
+		  WHERE id = $1
+		  RETURNING id, user_id, year, month, goal_amount::text, saved_amount::text, created_at, updated_at`,
+		id, *input.SavedAmount,
+	).Scan(&g.ID, &g.UserID, &g.Year, &g.Month, &g.GoalAmount, &g.SavedAmount, &g.CreatedAt, &g.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Goal{}, ErrNotFound
+		}
+		return Goal{}, fmt.Errorf("goal.repository.update: %w", err)
+	}
+	return g, nil
+}
+
 func (r *Repository) insert(ctx context.Context, userID string, input *CreateInput) (Goal, error) {
 	var g Goal
 	err := r.db.QueryRowContext(ctx,
