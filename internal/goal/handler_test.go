@@ -147,9 +147,14 @@ func TestIntegration_Goal_List(t *testing.T) {
 		assert.Empty(t, resp)
 	})
 
-	t.Run("GET returns goals with status", func(t *testing.T) {
+	t.Run("GET status under when saved < goal", func(t *testing.T) {
 		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
-		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
+		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
+		id := created["id"].(string)
+		doReq(t, r, http.MethodPut, "/v1/goals/"+id, `{"saved_amount":500}`, token)
+
 		w := doReq(t, r, http.MethodGet, "/v1/goals", "", token)
 		assert.Equal(t, http.StatusOK, w.Code)
 		var resp []map[string]any
@@ -157,6 +162,36 @@ func TestIntegration_Goal_List(t *testing.T) {
 		require.Len(t, resp, 1)
 		assert.Equal(t, "under", resp[0]["status"])
 		assert.Equal(t, "1000.00", resp[0]["goal_amount"])
+	})
+
+	t.Run("GET status met when saved == goal", func(t *testing.T) {
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
+		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
+		id := created["id"].(string)
+		doReq(t, r, http.MethodPut, "/v1/goals/"+id, `{"saved_amount":1000}`, token)
+
+		w := doReq(t, r, http.MethodGet, "/v1/goals", "", token)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp, 1)
+		assert.Equal(t, "met", resp[0]["status"])
+	})
+
+	t.Run("GET status over when saved > goal", func(t *testing.T) {
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
+		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
+		id := created["id"].(string)
+		doReq(t, r, http.MethodPut, "/v1/goals/"+id, `{"saved_amount":1500}`, token)
+
+		w := doReq(t, r, http.MethodGet, "/v1/goals", "", token)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp, 1)
+		assert.Equal(t, "over", resp[0]["status"])
 	})
 
 	t.Run("GET with year filter", func(t *testing.T) {
