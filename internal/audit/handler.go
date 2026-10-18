@@ -20,6 +20,13 @@ func NewHandler(service *Service) *Handler {
 // RegisterRoutes registers routes on the given router group.
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/audit", h.list)
+	// Audit log is immutable — reject mutating methods explicitly.
+	notAllowed := func(c *gin.Context) {
+		c.Status(http.StatusMethodNotAllowed)
+	}
+	rg.PUT("/audit", notAllowed)
+	rg.PATCH("/audit", notAllowed)
+	rg.DELETE("/audit", notAllowed)
 }
 
 func (h *Handler) list(c *gin.Context) {
