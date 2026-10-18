@@ -34,10 +34,12 @@ func authRouter(t *testing.T) (engine *gin.Engine, userID string) {
 	t.Helper()
 	db := testhelpers.SetupTestDB(t)
 
-	// Register a real user so the middleware can check it.
+	// Use a unique email per test to avoid conflicts on the shared CI database.
+	email := "mw_" + t.Name() + "@test.com"
 	err := db.QueryRowContext(context.Background(),
 		`INSERT INTO users (name, email, password_hash)
-		 VALUES ('Test', 'mw@test.com', 'hash') RETURNING id`,
+		 VALUES ('Test', $1, 'hash') RETURNING id`,
+		email,
 	).Scan(&userID)
 	require.NoError(t, err)
 
@@ -101,7 +103,8 @@ func TestAuth_DeletedUser(t *testing.T) {
 	var userID string
 	err := db.QueryRowContext(context.Background(),
 		`INSERT INTO users (name, email, password_hash, deleted_at)
-		 VALUES ('Del', 'deleted@test.com', 'hash', now()) RETURNING id`,
+		 VALUES ('Del', $1, 'hash', now()) RETURNING id`,
+		"mw_"+t.Name()+"@test.com",
 	).Scan(&userID)
 	require.NoError(t, err)
 
