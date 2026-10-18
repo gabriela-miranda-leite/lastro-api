@@ -7,19 +7,26 @@ import (
 
 // Config holds all environment-sourced application settings.
 type Config struct {
-	DatabaseURL string
-	JWTSecret   string
-	Env         string
-	Port        string
+	DatabaseURL   string
+	JWTSecret     string
+	Env           string
+	Port          string
+	AuthRateLimit string // e.g. "5-M" (default); raise in dev for load tests
 }
 
 // Load reads required environment variables and fails fast if any are missing.
 func Load() (*Config, error) {
+	authRate := os.Getenv("AUTH_RATE_LIMIT")
+	if authRate == "" {
+		authRate = "5-M"
+	}
+
 	cfg := &Config{
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		JWTSecret:   os.Getenv("JWT_SECRET"),
-		Env:         os.Getenv("ENV"),
-		Port:        os.Getenv("PORT"),
+		DatabaseURL:   os.Getenv("DATABASE_URL"),
+		JWTSecret:     os.Getenv("JWT_SECRET"),
+		Env:           os.Getenv("ENV"),
+		Port:          os.Getenv("PORT"),
+		AuthRateLimit: authRate,
 	}
 
 	if cfg.DatabaseURL == "" {
