@@ -268,6 +268,20 @@ func TestIntegration_DeleteMe(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
+	t.Run("audit_log entry is created on delete", func(t *testing.T) {
+		token, userID := registerAndLogin(t, r, "deleteaudit@test.com", "Senha123")
+
+		w := req(t, r, http.MethodDelete, "/v1/users/me", `{"password":"Senha123"}`, token)
+		assert.Equal(t, http.StatusNoContent, w.Code)
+
+		var count int
+		err := db.QueryRowContext(context.Background(),
+			`SELECT COUNT(*) FROM audit_log WHERE user_id = $1 AND action = 'delete_account'`,
+			userID).Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 1, count)
+	})
+
 	t.Run("without token returns 401", func(t *testing.T) {
 		w := req(t, r, http.MethodDelete, "/v1/users/me", `{"password":"Senha123"}`, "")
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
