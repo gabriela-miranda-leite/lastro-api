@@ -1,0 +1,23 @@
+{
+    "schemes": [
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "Backend do Lastro — controle financeiro pessoal e de casal.",
+        "title": "Lastro API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "lastro-api-8927.onrender.com",
+    "basePath": "/",
+    "paths": {},
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Formato: Bearer {token}",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}
