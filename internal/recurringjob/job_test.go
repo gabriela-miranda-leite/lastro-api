@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/gabriela-miranda-leite/lastro-api/internal/testhelpers"
 )
 
 func TestResolveDate_NormalDay(t *testing.T) {
@@ -54,4 +56,11 @@ func TestDeterministicClientID_DifferentRecurring(t *testing.T) {
 	id1 := deterministicClientID("rec-A", 2026, 10)
 	id2 := deterministicClientID("rec-B", 2026, 10)
 	assert.NotEqual(t, id1, id2)
+}
+
+func TestRunForCurrentMonth_DoesNotPanic(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	j := New(db)
+	// RunForCurrentMonth is the cron entry point; just verify it runs without panic.
+	assert.NotPanics(t, func() { j.RunForCurrentMonth() })
 }
