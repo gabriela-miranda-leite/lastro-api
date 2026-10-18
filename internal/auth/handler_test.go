@@ -360,3 +360,35 @@ func TestIntegration_JWTMiddleware(t *testing.T) {
 		assert.Equal(t, http.StatusNoContent, w.Code)
 	})
 }
+
+// --- POST /v1/auth/logout/all ---
+
+func TestIntegration_LogoutAll(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	t.Run("revokes all tokens for the user", func(t *testing.T) {
+		resp := registerUser(t, r, "logoutall@test.com", "Senha123")
+		access := resp["access_token"].(string)
+
+		w := post(t, r, "/v1/auth/logout/all", "", access)
+		assert.Equal(t, http.StatusNoContent, w.Code)
+
+		// Verify in the DB that no active refresh tokens remain for this user.
+		var active int
+		err := db.QueryRowContext(context.Background(), `
+			SELECT COUNT(*) FROM refresh_tokens rt
+			JOIN users u ON u.id = rt.user_id
+			WHERE u.email = 'logoutall@test.com'
+			  AND rt.revoked_at IS NULL
+			  AND rt.expires_at > now()`,
+		).Scan(&active)
+		require.NoError(t, err)
+		assert.Equal(t, 0, active, "all tokens must be revoked after logout/all")
+	})
+
+	t.Run("without JWT returns 401", func(t *testing.T) {
+		w := post(t, r, "/v1/auth/logout/all", "", "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}

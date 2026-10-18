@@ -214,6 +214,36 @@ func TestIntegration_Export(t *testing.T) {
 		assert.Equal(t, 1, count)
 	})
 
+	t.Run("export includes transactions and recurring expenses", func(t *testing.T) {
+		token, userID := registerAndLogin(t, r, "exportfull@test.com", "Senha123")
+
+		// Insert a transaction directly so buildExport's scan loop is exercised.
+		_, err := db.ExecContext(context.Background(), `
+			INSERT INTO transactions (id, user_id, amount, direction, date, client_id)
+			VALUES (gen_random_uuid(), $1, 100.00, 'out', '2026-01-01', gen_random_uuid())`,
+			userID)
+		require.NoError(t, err)
+
+		// Insert a recurring expense so that scan loop is exercised too.
+		_, err = db.ExecContext(context.Background(), `
+			INSERT INTO recurring_expenses (id, user_id, name, amount, due_day)
+			VALUES (gen_random_uuid(), $1, 'Internet', 99.90, 10)`,
+			userID)
+		require.NoError(t, err)
+
+		w := req(t, r, http.MethodGet, "/v1/users/me/export", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+
+		txs := resp["transactions"].([]any)
+		assert.Len(t, txs, 1)
+
+		recs := resp["recurring_expenses"].([]any)
+		assert.Len(t, recs, 1)
+	})
+
 	t.Run("without token returns 401", func(t *testing.T) {
 		w := req(t, r, http.MethodGet, "/v1/users/me/export", "", "")
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
