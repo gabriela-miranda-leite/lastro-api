@@ -20,7 +20,7 @@ func setEnv(t *testing.T, pairs ...string) {
 func TestLoad_Success(t *testing.T) {
 	setEnv(t,
 		"DATABASE_URL", "postgres://user:pass@localhost/db",
-		"JWT_SECRET", "supersecret",
+		"JWT_SECRET", "supersecret-that-is-long-enough-32ch",
 		"ENV", "development",
 	)
 	_ = os.Unsetenv("PORT")
@@ -30,7 +30,7 @@ func TestLoad_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "postgres://user:pass@localhost/db", cfg.DatabaseURL)
-	assert.Equal(t, "supersecret", cfg.JWTSecret)
+	assert.Equal(t, "supersecret-that-is-long-enough-32ch", cfg.JWTSecret)
 	assert.Equal(t, "development", cfg.Env)
 	assert.Equal(t, "8080", cfg.Port)         // default
 	assert.Equal(t, "5-M", cfg.AuthRateLimit) // default
@@ -39,7 +39,7 @@ func TestLoad_Success(t *testing.T) {
 func TestLoad_CustomPort(t *testing.T) {
 	setEnv(t,
 		"DATABASE_URL", "postgres://x",
-		"JWT_SECRET", "s",
+		"JWT_SECRET", "a-jwt-secret-that-is-long-enough!!",
 		"ENV", "production",
 		"PORT", "9090",
 	)
@@ -53,7 +53,7 @@ func TestLoad_CustomPort(t *testing.T) {
 func TestLoad_CustomAuthRateLimit(t *testing.T) {
 	setEnv(t,
 		"DATABASE_URL", "postgres://x",
-		"JWT_SECRET", "s",
+		"JWT_SECRET", "a-jwt-secret-that-is-long-enough!!",
 		"ENV", "development",
 		"AUTH_RATE_LIMIT", "100-M",
 	)
@@ -66,7 +66,7 @@ func TestLoad_CustomAuthRateLimit(t *testing.T) {
 
 func TestLoad_MissingDatabaseURL(t *testing.T) {
 	_ = os.Unsetenv("DATABASE_URL")
-	t.Setenv("JWT_SECRET", "s")
+	t.Setenv("JWT_SECRET", "a-jwt-secret-that-is-long-enough!!")
 	t.Setenv("ENV", "development")
 
 	_, err := config.Load()
@@ -88,7 +88,7 @@ func TestLoad_MissingJWTSecret(t *testing.T) {
 
 func TestLoad_MissingENV(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
-	t.Setenv("JWT_SECRET", "s")
+	t.Setenv("JWT_SECRET", "a-jwt-secret-that-is-long-enough!!")
 	_ = os.Unsetenv("ENV")
 
 	_, err := config.Load()
