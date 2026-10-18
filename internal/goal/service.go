@@ -23,8 +23,8 @@ func (s *Service) List(ctx context.Context, userID string, input ListInput) ([]G
 		return nil, fmt.Errorf("goal.service.List: %w", err)
 	}
 	result := make([]GoalWithStatus, len(goals))
-	for i, g := range goals {
-		result[i] = GoalWithStatus{Goal: g, Status: calcStatus(g.SavedAmount, g.GoalAmount)}
+	for i := range goals {
+		result[i] = GoalWithStatus{Goal: goals[i], Status: calcStatus(goals[i].SavedAmount, goals[i].GoalAmount)}
 	}
 	return result, nil
 }
