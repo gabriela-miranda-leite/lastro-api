@@ -4,6 +4,8 @@ import "time"
 
 var (
 	ErrConflict = errorSentinel("conflict")
+	ErrNotFound = errorSentinel("not found")
+	ErrForbidden = errorSentinel("forbidden")
 )
 
 type errorSentinel string
@@ -29,7 +31,7 @@ type CreateInput struct {
 	GoalAmount float64 `json:"goal_amount"  binding:"required"`
 }
 
-// GoalWithStatus is a Goal enriched with a calculated status field.
+// GoalWithStatus wraps Goal with a calculated status field.
 type GoalWithStatus struct {
 	Goal
 	Status string `json:"status"` // "under" | "met" | "over"
@@ -39,6 +41,11 @@ type GoalWithStatus struct {
 type ListInput struct {
 	Year  *int
 	Month *int
+}
+
+// UpdateInput is the request body for PUT /goals/:id.
+type UpdateInput struct {
+	SavedAmount *float64 `json:"saved_amount" binding:"required"`
 }
 
 // ValidationError carries a field-level validation failure.

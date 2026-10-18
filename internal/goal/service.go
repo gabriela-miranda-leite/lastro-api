@@ -29,19 +29,26 @@ func (s *Service) List(ctx context.Context, userID string, input ListInput) ([]G
 	return result, nil
 }
 
-// Create creates a new monthly savings goal for the user.
-func (s *Service) Create(ctx context.Context, userID string, input CreateInput) (Goal, error) {
-	if err := validateCreate(&input); err != nil {
+// Update sets the saved_amount of a goal, verifying ownership.
+func (s *Service) Update(ctx context.Context, userID, id string, input UpdateInput) (Goal, error) {
+	if err := validateUpdate(&input); err != nil {
 		return Goal{}, err
 	}
-	g, err := s.repo.insert(ctx, userID, &input)
+	g, err := s.repo.findByID(ctx, id)
 	if err != nil {
-		return Goal{}, fmt.Errorf("goal.service.Create: %w", err)
+		return Goal{}, fmt.Errorf("goal.service.Update: %w", err)
 	}
-	return g, nil
+	if g.UserID != userID {
+		return Goal{}, fmt.Errorf("goal.service.Update: %w", ErrForbidden)
+	}
+	updated, err := s.repo.update(ctx, id, &input)
+	if err != nil {
+		return Goal{}, fmt.Errorf("goal.service.Update: %w", err)
+	}
+	return updated, nil
 }
 
-// calcStatus compares saved vs goal amounts (NUMERIC strings from the DB) and returns the status.
+// calcStatus compares saved vs goal amounts (NUMERIC strings from the DB).
 func calcStatus(saved, goal string) string {
 	s, _ := strconv.ParseFloat(saved, 64)
 	g, _ := strconv.ParseFloat(goal, 64)
@@ -53,6 +60,25 @@ func calcStatus(saved, goal string) string {
 	default:
 		return "over"
 	}
+}
+
+func validateUpdate(input *UpdateInput) error {
+	if *input.SavedAmount < 0 {
+		return &ValidationError{Field: "saved_amount", Message: "must be zero or positive"}
+	}
+	return nil
+}
+
+// Create creates a new monthly savings goal for the user.
+func (s *Service) Create(ctx context.Context, userID string, input CreateInput) (Goal, error) {
+	if err := validateCreate(&input); err != nil {
+		return Goal{}, err
+	}
+	g, err := s.repo.insert(ctx, userID, &input)
+	if err != nil {
+		return Goal{}, fmt.Errorf("goal.service.Create: %w", err)
+	}
+	return g, nil
 }
 
 func validateCreate(input *CreateInput) error {

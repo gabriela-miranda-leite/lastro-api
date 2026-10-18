@@ -132,7 +132,150 @@ func TestIntegration_Goal(t *testing.T) {
 	})
 }
 
-// --- Handler unit test for 500 path ---
+// --- GET /goals integration ---
+
+func TestIntegration_Goal_List(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	t.Run("GET returns empty array when no goals", func(t *testing.T) {
+		token := registerAndLogin(t, r, "list_empty@test.com", "Senha123")
+		w := doReq(t, r, http.MethodGet, "/v1/goals", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Empty(t, resp)
+	})
+
+	t.Run("GET returns goals with status", func(t *testing.T) {
+		token := registerAndLogin(t, r, "list_goals@test.com", "Senha123")
+		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
+		w := doReq(t, r, http.MethodGet, "/v1/goals", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp, 1)
+		assert.Equal(t, "under", resp[0]["status"])
+	})
+
+	t.Run("GET with year filter", func(t *testing.T) {
+		token := registerAndLogin(t, r, "list_year@test.com", "Senha123")
+		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2025,"month":1,"goal_amount":500}`, token)
+		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":1,"goal_amount":800}`, token)
+		w := doReq(t, r, http.MethodGet, "/v1/goals?year=2026", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp, 1)
+		assert.Equal(t, float64(2026), resp[0]["year"])
+	})
+
+	t.Run("GET with year+month filter", func(t *testing.T) {
+		token := registerAndLogin(t, r, "list_ym@test.com", "Senha123")
+		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":5,"goal_amount":500}`, token)
+		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":6,"goal_amount":600}`, token)
+		w := doReq(t, r, http.MethodGet, "/v1/goals?year=2026&month=5", "", token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp []map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp, 1)
+		assert.Equal(t, float64(5), resp[0]["month"])
+	})
+
+	t.Run("GET month without year returns 422", func(t *testing.T) {
+		token := registerAndLogin(t, r, "list_noyr@test.com", "Senha123")
+		w := doReq(t, r, http.MethodGet, "/v1/goals?month=5", "", token)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
+
+	t.Run("GET without token returns 401", func(t *testing.T) {
+		w := doReq(t, r, http.MethodGet, "/v1/goals", "", "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+// --- PUT /goals/:id integration ---
+
+func TestIntegration_Goal_Update(t *testing.T) {
+	db := testhelpers.SetupTestDB(t)
+	r := setupRouter(db)
+
+	t.Run("PUT updates saved_amount", func(t *testing.T) {
+		token := registerAndLogin(t, r, "update_ok@test.com", "Senha123")
+		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := doReq(t, r, http.MethodPut, "/v1/goals/"+id, `{"saved_amount":500}`, token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Equal(t, "500.00", resp["saved_amount"])
+	})
+
+	t.Run("PUT allows zero", func(t *testing.T) {
+		token := registerAndLogin(t, r, "update_zero@test.com", "Senha123")
+		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := doReq(t, r, http.MethodPut, "/v1/goals/"+id, `{"saved_amount":0}`, token)
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("PUT allows over goal_amount", func(t *testing.T) {
+		token := registerAndLogin(t, r, "update_over@test.com", "Senha123")
+		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := doReq(t, r, http.MethodPut, "/v1/goals/"+id, `{"saved_amount":1500}`, token)
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		assert.Equal(t, "1500.00", resp["saved_amount"])
+	})
+
+	t.Run("PUT negative amount returns 422", func(t *testing.T) {
+		token := registerAndLogin(t, r, "update_neg@test.com", "Senha123")
+		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := doReq(t, r, http.MethodPut, "/v1/goals/"+id, `{"saved_amount":-1}`, token)
+		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
+
+	t.Run("PUT other user returns 403", func(t *testing.T) {
+		tokenA := registerAndLogin(t, r, "update_ownerA@test.com", "Senha123")
+		tokenB := registerAndLogin(t, r, "update_ownerB@test.com", "Senha123")
+		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, tokenA)
+		var created map[string]any
+		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
+		id := created["id"].(string)
+
+		w := doReq(t, r, http.MethodPut, "/v1/goals/"+id, `{"saved_amount":500}`, tokenB)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("PUT not found returns 404", func(t *testing.T) {
+		token := registerAndLogin(t, r, "update_nf@test.com", "Senha123")
+		w := doReq(t, r, http.MethodPut, "/v1/goals/00000000-0000-0000-0000-000000000000",
+			`{"saved_amount":500}`, token)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("PUT without token returns 401", func(t *testing.T) {
+		w := doReq(t, r, http.MethodPut, "/v1/goals/some-id", `{"saved_amount":500}`, "")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+// --- Handler unit tests ---
 
 // --- GET /goals integration ---
 
@@ -206,6 +349,10 @@ func (m *mockSvc) List(_ context.Context, _ string, _ goal.ListInput) ([]goal.Go
 }
 
 func (m *mockSvc) Create(_ context.Context, _ string, _ goal.CreateInput) (goal.Goal, error) {
+	return goal.Goal{}, m.err
+}
+
+func (m *mockSvc) Update(_ context.Context, _, _ string, _ goal.UpdateInput) (goal.Goal, error) {
 	return goal.Goal{}, m.err
 }
 
