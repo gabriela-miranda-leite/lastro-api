@@ -41,6 +41,11 @@ func (w *Worker) Run(ctx context.Context) {
 	}
 }
 
+// RunOnce executes a single purge cycle. Exported for testing.
+func (w *Worker) RunOnce(ctx context.Context) error {
+	return w.purge(ctx)
+}
+
 func (w *Worker) purge(ctx context.Context) error {
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
 
@@ -86,19 +91,22 @@ func (w *Worker) purgeUser(ctx context.Context, userID string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	tables := []string{
-		"refresh_tokens",
-		"couple_invites",
-		"recurring_expenses",
-		"monthly_savings",
-		"transactions",
+	type tableDelete struct {
+		table  string
+		column string
 	}
-	for _, table := range tables {
-		if _, err := tx.ExecContext(ctx,
-			fmt.Sprintf("DELETE FROM %s WHERE user_id = $1", table), //nolint:gosec // table names are hardcoded, not user input
-			userID,
-		); err != nil {
-			return fmt.Errorf("purge user %s: delete %s: %w", userID, table, err)
+	tables := []tableDelete{
+		{"refresh_tokens", "user_id"},
+		{"couple_invites", "inviter_id"},
+		{"recurring_expenses", "user_id"},
+		{"monthly_savings", "user_id"},
+		{"transactions", "user_id"},
+	}
+	for _, td := range tables {
+		//nolint:gosec // table/column names are hardcoded constants, not user input
+		q := fmt.Sprintf("DELETE FROM %s WHERE %s = $1", td.table, td.column)
+		if _, err := tx.ExecContext(ctx, q, userID); err != nil {
+			return fmt.Errorf("purge user %s: delete %s: %w", userID, td.table, err)
 		}
 	}
 
