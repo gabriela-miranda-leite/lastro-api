@@ -12,6 +12,7 @@ import (
 type goalService interface {
 	List(ctx context.Context, userID string, input ListInput) ([]GoalWithStatus, error)
 	Create(ctx context.Context, userID string, input CreateInput) (Goal, error)
+	Update(ctx context.Context, userID, id string, input UpdateInput) (Goal, error)
 }
 
 // Handler handles HTTP requests for the goal domain.
@@ -33,6 +34,34 @@ func NewHandlerWithService(svc goalService) *Handler {
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/goals", h.list)
 	rg.POST("/goals", h.create)
+	rg.PUT("/goals/:id", h.update)
+}
+
+func (h *Handler) update(c *gin.Context) {
+	id := c.Param("id")
+	userID := c.GetString("user_id")
+
+	var input UpdateInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	g, err := h.service.Update(c.Request.Context(), userID, id, input)
+	if err != nil {
+		var valErr *ValidationError
+		switch {
+		case errors.As(err, &valErr):
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": valErr.Message, "field": valErr.Field})
+		case errors.Is(err, ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "goal not found"})
+		case errors.Is(err, ErrForbidden):
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, g)
 }
 
 func (h *Handler) list(c *gin.Context) {
