@@ -2,3 +2,7 @@
 .env.*
 !.env.example
 load-tests/k6/reports/*.json
+coverage*.out
+coverage*.html
+cov_*.out
+/api
