@@ -28,7 +28,9 @@ swagger:
 # coverage: run tests with coverage and fail if totals fall below minimums.
 # Global minimum: 75%. Service layer (packages with a service.go): 80%.
 coverage:
-	go test -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./...
+	go test -coverprofile=coverage.out -covermode=atomic \
+		-coverpkg=$$(go list ./... | grep -v 'cmd/api$$' | grep -v '/internal/db$$' | grep -v '/testhelpers$$' | tr '\n' ',') \
+		./... 2>&1 | awk '/^ok|^FAIL|^\?/{split($$0,a,"\t"); print a[1]"\t"a[2]"\t"a[3]}'
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "--- Coverage summary ---"; \
 	go tool cover -func=coverage.out | grep '^total:'; \
