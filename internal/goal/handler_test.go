@@ -71,7 +71,7 @@ func registerAndLogin(t *testing.T, r *gin.Engine, email, password string) strin
 	return resp["access_token"].(string)
 }
 
-// --- Integration ---
+// --- POST /goals integration ---
 
 func TestIntegration_Goal(t *testing.T) {
 	db := testhelpers.SetupTestDB(t)
@@ -139,7 +139,7 @@ func TestIntegration_Goal_List(t *testing.T) {
 	r := setupRouter(db)
 
 	t.Run("GET returns empty array when no goals", func(t *testing.T) {
-		token := registerAndLogin(t, r, "list_empty@test.com", "Senha123")
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		w := doReq(t, r, http.MethodGet, "/v1/goals", "", token)
 		assert.Equal(t, http.StatusOK, w.Code)
 		var resp []any
@@ -148,7 +148,7 @@ func TestIntegration_Goal_List(t *testing.T) {
 	})
 
 	t.Run("GET returns goals with status", func(t *testing.T) {
-		token := registerAndLogin(t, r, "list_goals@test.com", "Senha123")
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
 		w := doReq(t, r, http.MethodGet, "/v1/goals", "", token)
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -159,7 +159,7 @@ func TestIntegration_Goal_List(t *testing.T) {
 	})
 
 	t.Run("GET with year filter", func(t *testing.T) {
-		token := registerAndLogin(t, r, "list_year@test.com", "Senha123")
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2025,"month":1,"goal_amount":500}`, token)
 		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":1,"goal_amount":800}`, token)
 		w := doReq(t, r, http.MethodGet, "/v1/goals?year=2026", "", token)
@@ -171,7 +171,7 @@ func TestIntegration_Goal_List(t *testing.T) {
 	})
 
 	t.Run("GET with year+month filter", func(t *testing.T) {
-		token := registerAndLogin(t, r, "list_ym@test.com", "Senha123")
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":5,"goal_amount":500}`, token)
 		doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":6,"goal_amount":600}`, token)
 		w := doReq(t, r, http.MethodGet, "/v1/goals?year=2026&month=5", "", token)
@@ -183,7 +183,7 @@ func TestIntegration_Goal_List(t *testing.T) {
 	})
 
 	t.Run("GET month without year returns 422", func(t *testing.T) {
-		token := registerAndLogin(t, r, "list_noyr@test.com", "Senha123")
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		w := doReq(t, r, http.MethodGet, "/v1/goals?month=5", "", token)
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 	})
@@ -201,7 +201,7 @@ func TestIntegration_Goal_Update(t *testing.T) {
 	r := setupRouter(db)
 
 	t.Run("PUT updates saved_amount", func(t *testing.T) {
-		token := registerAndLogin(t, r, "update_ok@test.com", "Senha123")
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
@@ -215,7 +215,7 @@ func TestIntegration_Goal_Update(t *testing.T) {
 	})
 
 	t.Run("PUT allows zero", func(t *testing.T) {
-		token := registerAndLogin(t, r, "update_zero@test.com", "Senha123")
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
@@ -226,7 +226,7 @@ func TestIntegration_Goal_Update(t *testing.T) {
 	})
 
 	t.Run("PUT allows over goal_amount", func(t *testing.T) {
-		token := registerAndLogin(t, r, "update_over@test.com", "Senha123")
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
@@ -240,7 +240,7 @@ func TestIntegration_Goal_Update(t *testing.T) {
 	})
 
 	t.Run("PUT negative amount returns 422", func(t *testing.T) {
-		token := registerAndLogin(t, r, "update_neg@test.com", "Senha123")
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, token)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
@@ -251,8 +251,8 @@ func TestIntegration_Goal_Update(t *testing.T) {
 	})
 
 	t.Run("PUT other user returns 403", func(t *testing.T) {
-		tokenA := registerAndLogin(t, r, "update_ownerA@test.com", "Senha123")
-		tokenB := registerAndLogin(t, r, "update_ownerB@test.com", "Senha123")
+		tokenA := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
+		tokenB := registerAndLogin(t, r, uniqueEmail(t, "b"), "Senha123")
 		wc := doReq(t, r, http.MethodPost, "/v1/goals", `{"year":2026,"month":10,"goal_amount":1000}`, tokenA)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
@@ -263,7 +263,7 @@ func TestIntegration_Goal_Update(t *testing.T) {
 	})
 
 	t.Run("PUT not found returns 404", func(t *testing.T) {
-		token := registerAndLogin(t, r, "update_nf@test.com", "Senha123")
+		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		w := doReq(t, r, http.MethodPut, "/v1/goals/00000000-0000-0000-0000-000000000000",
 			`{"saved_amount":500}`, token)
 		assert.Equal(t, http.StatusNotFound, w.Code)
