@@ -3,9 +3,7 @@ package goal
 import "time"
 
 var (
-	ErrConflict  = errorSentinel("conflict")
-	ErrNotFound  = errorSentinel("not found")
-	ErrForbidden = errorSentinel("forbidden")
+	ErrConflict = errorSentinel("conflict")
 )
 
 type errorSentinel string
@@ -41,11 +39,6 @@ type GoalWithStatus struct {
 type ListInput struct {
 	Year  *int
 	Month *int
-}
-
-// UpdateInput is the request body for PUT /goals/:id.
-type UpdateInput struct {
-	SavedAmount *float64 `json:"saved_amount" binding:"required"`
 }
 
 // ValidationError carries a field-level validation failure.
