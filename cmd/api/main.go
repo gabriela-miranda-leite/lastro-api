@@ -14,6 +14,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/gabriela-miranda-leite/lastro-api/config"
+	"github.com/gabriela-miranda-leite/lastro-api/internal/audit"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/auth"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/couple"
 	"github.com/gabriela-miranda-leite/lastro-api/internal/dashboard"
@@ -83,6 +84,9 @@ func main() {
 
 	dashboardHandler := dashboard.NewHandler(dashboard.NewService(dashboard.NewRepository(database)))
 	dashboardHandler.RegisterRoutes(protected)
+
+	auditHandler := audit.NewHandler(audit.NewService(audit.NewRepository(database)))
+	auditHandler.RegisterRoutes(protected)
 
 	// job de geração automática de fixos — roda às 00:00 de todo dia 1 (horário de Brasília)
 	brasilia, err := time.LoadLocation("America/Fortaleza")
