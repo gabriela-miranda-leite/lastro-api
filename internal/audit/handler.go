@@ -1,6 +1,11 @@
 package audit
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+)
 
 // Handler handles HTTP requests for the audit domain.
 type Handler struct {
@@ -13,4 +18,43 @@ func NewHandler(service *Service) *Handler {
 }
 
 // RegisterRoutes registers routes on the given router group.
-func (h *Handler) RegisterRoutes(_ *gin.RouterGroup) {}
+func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
+	rg.GET("/audit", h.list)
+}
+
+func (h *Handler) list(c *gin.Context) {
+	limit, err := parsePositiveInt(c.DefaultQuery("limit", "20"), 1, 100)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "limit must be between 1 and 100"})
+		return
+	}
+	offset, err := parseNonNegativeInt(c.DefaultQuery("offset", "0"))
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "offset must be a non-negative integer"})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	resp, err := h.service.List(c.Request.Context(), userID, ListInput{Limit: limit, Offset: offset})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func parsePositiveInt(s string, minVal, maxVal int) (int, error) {
+	v, err := strconv.Atoi(s)
+	if err != nil || v < minVal || v > maxVal {
+		return 0, strconv.ErrRange
+	}
+	return v, nil
+}
+
+func parseNonNegativeInt(s string) (int, error) {
+	v, err := strconv.Atoi(s)
+	if err != nil || v < 0 {
+		return 0, strconv.ErrRange
+	}
+	return v, nil
+}
