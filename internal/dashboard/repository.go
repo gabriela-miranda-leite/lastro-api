@@ -57,7 +57,7 @@ func (r *Repository) FetchPartnerID(ctx context.Context, coupleID, userID string
 func (r *Repository) FetchIncome(ctx context.Context, userID string, year, month int) (string, error) {
 	var total string
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(amount), 0)::text
+		`SELECT COALESCE(SUM(amount), 0)::numeric(12,2)::text
 		   FROM transactions
 		  WHERE user_id = $1
 		    AND direction = 'in'

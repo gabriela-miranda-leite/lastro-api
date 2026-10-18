@@ -135,11 +135,18 @@ func buildExpenses(typeAmounts []TypeAmount, income string) *ExpensesSummary {
 	byType := make(map[string]*TypeBreakdown, len(allTypes))
 	for _, t := range allTypes {
 		amt := amountMap[t]
+		var status string
+		if incomeF == 0 {
+			// no income means no budget allocated; every type is under target
+			status = "under"
+		} else {
+			status = calcStatus(amt, targetPct(t, incomeF))
+		}
 		byType[t] = &TypeBreakdown{
 			Amount:    formatAmount(amt),
 			Pct:       formatPct(pct(amt, incomeF)),
 			TargetPct: targetPcts[t],
-			Status:    calcStatus(amt, targetPct(t, incomeF)),
+			Status:    status,
 		}
 	}
 
