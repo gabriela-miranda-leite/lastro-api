@@ -55,7 +55,7 @@ func doReq(t *testing.T, r *gin.Engine, method, path, body, token string) *httpt
 
 func uniqueEmail(t *testing.T, label string) string {
 	t.Helper()
-	h := fmt.Sprintf("%x", md5.Sum([]byte(t.Name()+label))) //nolint:gosec
+	h := fmt.Sprintf("%x", md5.Sum([]byte(t.Name()+label))) //nolint:gosec // md5 used for uniqueness, not security
 	return "user_" + h[:12] + "@test.com"
 }
 
