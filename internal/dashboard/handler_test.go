@@ -89,7 +89,7 @@ func insertCategory(t *testing.T, db *sql.DB, userID, name, catType string) stri
 }
 
 // postTx posts a transaction and returns its ID.
-func postTx(t *testing.T, r *gin.Engine, token, clientID string, amount string, direction, date, categoryID string, isShared bool) string {
+func postTx(t *testing.T, r *gin.Engine, token, clientID, amount, direction, date, categoryID string, isShared bool) string {
 	t.Helper()
 	var catPart string
 	if categoryID != "" {
