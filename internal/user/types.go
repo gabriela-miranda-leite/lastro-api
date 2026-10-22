@@ -22,6 +22,11 @@ type DeleteInput struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type ChangePasswordInput struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required"`
+}
+
 type MeResponse struct {
 	ID            string           `json:"id"`
 	Name          string           `json:"name"`

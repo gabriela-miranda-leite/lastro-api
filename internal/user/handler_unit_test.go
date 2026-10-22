@@ -13,10 +13,11 @@ import (
 )
 
 type mockService struct {
-	meFn     func(ctx context.Context, userID string) (MeResponse, error)
-	exportFn func(ctx context.Context, userID, ip string) (ExportData, error)
-	updateFn func(ctx context.Context, userID string, input UpdateInput) (MeResponse, error)
-	deleteFn func(ctx context.Context, userID string, input DeleteInput) error
+	meFn             func(ctx context.Context, userID string) (MeResponse, error)
+	exportFn         func(ctx context.Context, userID, ip string) (ExportData, error)
+	updateFn         func(ctx context.Context, userID string, input UpdateInput) (MeResponse, error)
+	deleteFn         func(ctx context.Context, userID string, input DeleteInput) error
+	changePasswordFn func(ctx context.Context, userID string, input ChangePasswordInput) error
 }
 
 func (m *mockService) Me(ctx context.Context, userID string) (MeResponse, error) {
@@ -43,6 +44,13 @@ func (m *mockService) Update(ctx context.Context, userID string, input UpdateInp
 func (m *mockService) Delete(ctx context.Context, userID string, input DeleteInput) error {
 	if m.deleteFn != nil {
 		return m.deleteFn(ctx, userID, input)
+	}
+	return nil
+}
+
+func (m *mockService) ChangePassword(ctx context.Context, userID string, input ChangePasswordInput) error {
+	if m.changePasswordFn != nil {
+		return m.changePasswordFn(ctx, userID, input)
 	}
 	return nil
 }
