@@ -72,49 +72,49 @@ func TestBuildExpenses_IncomeZero(t *testing.T) {
 		require.NotNil(t, b, "type %s missing", typ)
 		assert.Equal(t, "0.00", b.Amount)
 		assert.Equal(t, "0.00", b.Pct)
-		assert.Equal(t, "under", b.Status, "type %s should be under when income is zero", typ)
+		assert.Equal(t, "UNDER", b.Status, "type %s should be under when income is zero", typ)
 	}
 }
 
 func TestBuildExpenses_StatusUnder(t *testing.T) {
-	// necessity target = 50% of 1000 = 500; we spend 400 → under
-	ta := []TypeAmount{{Type: "necessity", Amount: "400.00"}}
+	// NEEDS target = 50% of 1000 = 500; we spend 400 → UNDER
+	ta := []TypeAmount{{Type: "NEEDS", Amount: "400.00"}}
 	exp := buildExpenses(ta, "1000.00")
 
-	assert.Equal(t, "under", exp.ByType["necessity"].Status)
-	assert.Equal(t, "40.00", exp.ByType["necessity"].Pct)
-	assert.Equal(t, "50", exp.ByType["necessity"].TargetPct)
+	assert.Equal(t, "UNDER", exp.ByType["NEEDS"].Status)
+	assert.Equal(t, "40.00", exp.ByType["NEEDS"].Pct)
+	assert.Equal(t, "50", exp.ByType["NEEDS"].TargetPct)
 }
 
 func TestBuildExpenses_StatusMet(t *testing.T) {
-	// necessity target = 50% of 1000 = 500; we spend exactly 500 → met
-	ta := []TypeAmount{{Type: "necessity", Amount: "500.00"}}
+	// NEEDS target = 50% of 1000 = 500; we spend exactly 500 → MET
+	ta := []TypeAmount{{Type: "NEEDS", Amount: "500.00"}}
 	exp := buildExpenses(ta, "1000.00")
 
-	assert.Equal(t, "met", exp.ByType["necessity"].Status)
+	assert.Equal(t, "MET", exp.ByType["NEEDS"].Status)
 }
 
 func TestBuildExpenses_StatusOver(t *testing.T) {
-	// leisure target = 30% of 1000 = 300; we spend 400 → over
-	ta := []TypeAmount{{Type: "leisure", Amount: "400.00"}}
+	// WANTS target = 30% of 1000 = 300; we spend 400 → OVER
+	ta := []TypeAmount{{Type: "WANTS", Amount: "400.00"}}
 	exp := buildExpenses(ta, "1000.00")
 
-	assert.Equal(t, "over", exp.ByType["leisure"].Status)
+	assert.Equal(t, "OVER", exp.ByType["WANTS"].Status)
 }
 
 func TestBuildExpenses_MissingTypeDefaultsToZero(t *testing.T) {
-	// only necessity provided; investment, leisure, saving should be "0.00"
-	ta := []TypeAmount{{Type: "necessity", Amount: "100.00"}}
+	// only NEEDS provided; WANTS and SAVINGS should be "0.00"
+	ta := []TypeAmount{{Type: "NEEDS", Amount: "100.00"}}
 	exp := buildExpenses(ta, "500.00")
 
-	assert.Equal(t, "0.00", exp.ByType["investment"].Amount)
-	assert.Equal(t, "under", exp.ByType["investment"].Status)
+	assert.Equal(t, "0.00", exp.ByType["SAVINGS"].Amount)
+	assert.Equal(t, "UNDER", exp.ByType["SAVINGS"].Status)
 }
 
 func TestBuildExpenses_TotalSumsAllTypes(t *testing.T) {
 	ta := []TypeAmount{
-		{Type: "necessity", Amount: "300.00"},
-		{Type: "leisure", Amount: "150.00"},
+		{Type: "NEEDS", Amount: "300.00"},
+		{Type: "WANTS", Amount: "150.00"},
 	}
 	exp := buildExpenses(ta, "1000.00")
 
@@ -125,26 +125,26 @@ func TestBuildExpenses_TotalSumsAllTypes(t *testing.T) {
 
 func TestBuildSavings_Under(t *testing.T) {
 	s := buildSavings(&SavingsRow{GoalAmount: "1000.00", SavedAmount: "500.00"})
-	assert.Equal(t, "under", s.Status)
+	assert.Equal(t, "UNDER", s.Status)
 	assert.Equal(t, "1000.00", s.Goal)
 	assert.Equal(t, "500.00", s.Saved)
 }
 
 func TestBuildSavings_Met(t *testing.T) {
 	s := buildSavings(&SavingsRow{GoalAmount: "500.00", SavedAmount: "500.00"})
-	assert.Equal(t, "met", s.Status)
+	assert.Equal(t, "MET", s.Status)
 }
 
 func TestBuildSavings_Over(t *testing.T) {
 	s := buildSavings(&SavingsRow{GoalAmount: "500.00", SavedAmount: "600.00"})
-	assert.Equal(t, "over", s.Status)
+	assert.Equal(t, "OVER", s.Status)
 }
 
 // --- mergeTypeAmounts ---
 
 func TestMergeTypeAmounts_SumsCorrectly(t *testing.T) {
-	a := []TypeAmount{{Type: "necessity", Amount: "200.00"}, {Type: "leisure", Amount: "100.00"}}
-	b := []TypeAmount{{Type: "necessity", Amount: "300.00"}, {Type: "saving", Amount: "50.00"}}
+	a := []TypeAmount{{Type: "NEEDS", Amount: "200.00"}, {Type: "WANTS", Amount: "100.00"}}
+	b := []TypeAmount{{Type: "NEEDS", Amount: "300.00"}, {Type: "SAVINGS", Amount: "50.00"}}
 
 	result := mergeTypeAmounts(a, b)
 
@@ -153,9 +153,9 @@ func TestMergeTypeAmounts_SumsCorrectly(t *testing.T) {
 		m[ta.Type] = ta.Amount
 	}
 
-	assert.Equal(t, "500.00", m["necessity"])
-	assert.Equal(t, "100.00", m["leisure"])
-	assert.Equal(t, "50.00", m["saving"])
+	assert.Equal(t, "500.00", m["NEEDS"])
+	assert.Equal(t, "100.00", m["WANTS"])
+	assert.Equal(t, "50.00", m["SAVINGS"])
 }
 
 func TestMergeTypeAmounts_EmptySlices(t *testing.T) {
@@ -174,10 +174,9 @@ func TestAddAmounts(t *testing.T) {
 
 func TestTargetPct_KnownTypes(t *testing.T) {
 	cases := map[string]float64{
-		"necessity":  500, // 50% of 1000
-		"leisure":    300, // 30% of 1000
-		"investment": 200, // 20% of 1000
-		"saving":     200, // 20% of 1000
+		"NEEDS":   500, // 50% of 1000
+		"WANTS":   300, // 30% of 1000
+		"SAVINGS": 200, // 20% of 1000
 	}
 	for typ, want := range cases {
 		assert.Equal(t, want, targetPct(typ, 1000), "type %s", typ)
@@ -191,9 +190,9 @@ func TestTargetPct_UnknownType(t *testing.T) {
 // --- calcStatus ---
 
 func TestCalcStatus(t *testing.T) {
-	assert.Equal(t, "under", calcStatus(100, 200))
-	assert.Equal(t, "met", calcStatus(200, 200))
-	assert.Equal(t, "over", calcStatus(300, 200))
+	assert.Equal(t, "UNDER", calcStatus(100, 200))
+	assert.Equal(t, "MET", calcStatus(200, 200))
+	assert.Equal(t, "OVER", calcStatus(300, 200))
 }
 
 // --- Service.Get via mock ---
@@ -203,7 +202,7 @@ func TestService_Get_NoCouple(t *testing.T) {
 		userInfo:     UserInfo{CoupleID: sql.NullString{Valid: false}},
 		incomeByUser: map[string]string{"user1": "2000.00"},
 		expensesByUser: map[string][]TypeAmount{
-			"user1": {{Type: "necessity", Amount: "900.00"}},
+			"user1": {{Type: "NEEDS", Amount: "900.00"}},
 		},
 		savings:      SavingsRow{GoalAmount: "400.00", SavedAmount: "200.00"},
 		savingsFound: true,
@@ -216,7 +215,7 @@ func TestService_Get_NoCouple(t *testing.T) {
 	assert.Equal(t, "2000.00", resp.Income)
 	assert.Nil(t, resp.Couple)
 	require.NotNil(t, resp.Savings)
-	assert.Equal(t, "under", resp.Savings.Status)
+	assert.Equal(t, "UNDER", resp.Savings.Status)
 }
 
 func TestService_Get_WithCouple(t *testing.T) {
@@ -228,8 +227,8 @@ func TestService_Get_WithCouple(t *testing.T) {
 			"user2": "1000.00",
 		},
 		expensesByUser: map[string][]TypeAmount{
-			"user1": {{Type: "necessity", Amount: "300.00"}},
-			"user2": {{Type: "necessity", Amount: "200.00"}},
+			"user1": {{Type: "NEEDS", Amount: "300.00"}},
+			"user2": {{Type: "NEEDS", Amount: "200.00"}},
 		},
 	}
 	svc := &Service{repo: repo}
@@ -239,8 +238,8 @@ func TestService_Get_WithCouple(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp.Couple)
 	assert.Equal(t, "2000.00", resp.Couple.Income)
-	// combined necessity = 500 out of 2000 income = 25% → under 50% target
-	assert.Equal(t, "under", resp.Couple.Expenses.ByType["necessity"].Status)
+	// combined NEEDS = 500 out of 2000 income = 25% → UNDER 50% target
+	assert.Equal(t, "UNDER", resp.Couple.Expenses.ByType["NEEDS"].Status)
 }
 
 func TestService_Get_NoSavingsGoal(t *testing.T) {

@@ -6,10 +6,9 @@ import (
 )
 
 var validTypes = map[string]bool{
-	"necessity":  true,
-	"leisure":    true,
-	"investment": true,
-	"saving":     true,
+	TypeNeeds:   true,
+	TypeWants:   true,
+	TypeSavings: true,
 }
 
 // Service contains business logic for the category domain.
@@ -32,7 +31,7 @@ func (s *Service) List(ctx context.Context, userID string) ([]Category, error) {
 
 func (s *Service) Create(ctx context.Context, userID string, input CreateInput) (Category, error) {
 	if !validTypes[input.Type] {
-		return Category{}, &ValidationError{Field: "type", Message: "must be one of: necessity, leisure, investment, saving"}
+		return Category{}, &ValidationError{Field: "type", Message: "must be one of: NEEDS, WANTS, SAVINGS"}
 	}
 	c, err := s.repo.Insert(ctx, userID, input)
 	if err != nil {
@@ -43,7 +42,7 @@ func (s *Service) Create(ctx context.Context, userID string, input CreateInput) 
 
 func (s *Service) Update(ctx context.Context, userID, id string, input UpdateInput) (Category, error) {
 	if input.Type != nil && !validTypes[*input.Type] {
-		return Category{}, &ValidationError{Field: "type", Message: "must be one of: necessity, leisure, investment, saving"}
+		return Category{}, &ValidationError{Field: "type", Message: "must be one of: NEEDS, WANTS, SAVINGS"}
 	}
 	existing, err := s.repo.FindByID(ctx, id)
 	if err != nil {

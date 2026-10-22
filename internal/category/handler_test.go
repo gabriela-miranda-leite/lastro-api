@@ -87,7 +87,7 @@ func TestCategory_List(t *testing.T) {
 
 	t.Run("returns own categories", func(t *testing.T) {
 		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
-		doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"Netflix","type":"leisure"}`, token)
+		doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"Netflix","type":"WANTS"}`, token)
 		w := doReq(t, r, http.MethodGet, "/v1/categories", "", token)
 		assert.Equal(t, http.StatusOK, w.Code)
 		var resp []any
@@ -109,12 +109,12 @@ func TestCategory_Create(t *testing.T) {
 
 	t.Run("creates category", func(t *testing.T) {
 		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
-		w := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"Aluguel","type":"necessity"}`, token)
+		w := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"Aluguel","type":"NEEDS"}`, token)
 		assert.Equal(t, http.StatusCreated, w.Code)
 		var resp map[string]any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		assert.Equal(t, "Aluguel", resp["name"])
-		assert.Equal(t, "necessity", resp["type"])
+		assert.Equal(t, "NEEDS", resp["type"])
 	})
 
 	t.Run("invalid type returns 422", func(t *testing.T) {
@@ -125,12 +125,12 @@ func TestCategory_Create(t *testing.T) {
 
 	t.Run("missing name returns 422", func(t *testing.T) {
 		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
-		w := doReq(t, r, http.MethodPost, "/v1/categories", `{"type":"leisure"}`, token)
+		w := doReq(t, r, http.MethodPost, "/v1/categories", `{"type":"WANTS"}`, token)
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 	})
 
 	t.Run("without token returns 401", func(t *testing.T) {
-		w := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"X","type":"leisure"}`, "")
+		w := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"X","type":"WANTS"}`, "")
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
@@ -143,7 +143,7 @@ func TestCategory_Update(t *testing.T) {
 
 	t.Run("updates category", func(t *testing.T) {
 		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
-		wc := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"Netflix","type":"leisure"}`, token)
+		wc := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"Netflix","type":"WANTS"}`, token)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
 		id := created["id"].(string)
@@ -157,7 +157,7 @@ func TestCategory_Update(t *testing.T) {
 
 	t.Run("invalid type returns 422", func(t *testing.T) {
 		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
-		wc := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"X","type":"leisure"}`, token)
+		wc := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"X","type":"WANTS"}`, token)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
 		id := created["id"].(string)
@@ -169,7 +169,7 @@ func TestCategory_Update(t *testing.T) {
 	t.Run("other user returns 403", func(t *testing.T) {
 		tokenA := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		tokenB := registerAndLogin(t, r, uniqueEmail(t, "b"), "Senha123")
-		wc := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"X","type":"leisure"}`, tokenA)
+		wc := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"X","type":"WANTS"}`, tokenA)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
 		id := created["id"].(string)
@@ -193,7 +193,7 @@ func TestCategory_Delete(t *testing.T) {
 
 	t.Run("deletes category", func(t *testing.T) {
 		token := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
-		wc := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"Netflix","type":"leisure"}`, token)
+		wc := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"Netflix","type":"WANTS"}`, token)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
 		id := created["id"].(string)
@@ -210,7 +210,7 @@ func TestCategory_Delete(t *testing.T) {
 	t.Run("other user returns 403", func(t *testing.T) {
 		tokenA := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 		tokenB := registerAndLogin(t, r, uniqueEmail(t, "b"), "Senha123")
-		wc := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"X","type":"leisure"}`, tokenA)
+		wc := doReq(t, r, http.MethodPost, "/v1/categories", `{"name":"X","type":"WANTS"}`, tokenA)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wc.Body.Bytes(), &created))
 		id := created["id"].(string)
@@ -263,7 +263,7 @@ func TestHandler_InternalErrors(t *testing.T) {
 	t.Run("create 500", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/categories",
-			strings.NewReader(`{"name":"X","type":"leisure"}`))
+			strings.NewReader(`{"name":"X","type":"WANTS"}`))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusInternalServerError, w.Code)

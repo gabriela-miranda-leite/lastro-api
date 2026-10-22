@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -64,8 +65,11 @@ func (s *Service) Update(ctx context.Context, userID string, input UpdateInput) 
 			return MeResponse{}, &ValidationError{Field: "name", Message: "must be 150 characters or fewer"}
 		}
 	}
-	if input.MonthlyIncome != nil && *input.MonthlyIncome <= 0 {
-		return MeResponse{}, &ValidationError{Field: "monthly_income", Message: "must be greater than zero"}
+	if input.MonthlyIncome != nil {
+		v, err := strconv.ParseFloat(*input.MonthlyIncome, 64)
+		if err != nil || v <= 0 {
+			return MeResponse{}, &ValidationError{Field: "monthly_income", Message: "must be a positive numeric string, e.g. \"3000.00\""}
+		}
 	}
 	if input.SavingGoalPct != nil && (*input.SavingGoalPct < 0 || *input.SavingGoalPct > 100) {
 		return MeResponse{}, &ValidationError{Field: "saving_goal_pct", Message: "must be between 0 and 100"}

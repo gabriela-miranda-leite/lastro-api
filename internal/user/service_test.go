@@ -33,15 +33,15 @@ func TestService_Update(t *testing.T) {
 		},
 		{
 			name:      "monthly_income zero",
-			input:     UpdateInput{MonthlyIncome: ptr(0.0)},
+			input:     UpdateInput{MonthlyIncome: ptr("0.00")},
 			wantField: "monthly_income",
-			wantMsg:   "greater than zero",
+			wantMsg:   "positive numeric string",
 		},
 		{
 			name:      "monthly_income negative",
-			input:     UpdateInput{MonthlyIncome: ptr(-1.0)},
+			input:     UpdateInput{MonthlyIncome: ptr("-1.00")},
 			wantField: "monthly_income",
-			wantMsg:   "greater than zero",
+			wantMsg:   "positive numeric string",
 		},
 		{
 			name:      "saving_goal_pct above 100",

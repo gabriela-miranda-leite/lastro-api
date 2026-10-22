@@ -75,8 +75,11 @@ func (s *Service) Delete(ctx context.Context, userID, id string) error {
 
 // Update edits an existing transaction. Only the owner may edit.
 func (s *Service) Update(ctx context.Context, userID, id string, input UpdateInput) (Transaction, error) {
-	if input.Amount != nil && *input.Amount <= 0 {
-		return Transaction{}, &ValidationError{Field: "amount", Message: "must be greater than zero"}
+	if input.Amount != nil {
+		var amountF float64
+		if _, err := fmt.Sscanf(*input.Amount, "%f", &amountF); err != nil || amountF <= 0 {
+			return Transaction{}, &ValidationError{Field: "amount", Message: "must be a positive numeric string, e.g. \"150.00\""}
+		}
 	}
 	if input.Date != nil {
 		if _, err := time.Parse("2006-01-02", *input.Date); err != nil {
@@ -118,8 +121,8 @@ func (s *Service) List(ctx context.Context, callerID string, input ListInput) ([
 	if input.Month < 1 || input.Month > 12 {
 		return nil, &ValidationError{Field: "month", Message: "must be between 1 and 12"}
 	}
-	if input.Direction != nil && *input.Direction != "in" && *input.Direction != "out" {
-		return nil, &ValidationError{Field: "direction", Message: `must be "in" or "out"`}
+	if input.Direction != nil && *input.Direction != DirectionIncome && *input.Direction != DirectionExpense {
+		return nil, &ValidationError{Field: "direction", Message: `must be "INCOME" or "EXPENSE"`}
 	}
 
 	targetID := callerID
@@ -143,11 +146,15 @@ func (s *Service) List(ctx context.Context, callerID string, input ListInput) ([
 }
 
 func (s *Service) validate(input *CreateInput) error {
-	if input.Amount <= 0 {
+	if input.Amount == "" {
 		return &ValidationError{Field: "amount", Message: "must be greater than zero"}
 	}
-	if input.Direction != "in" && input.Direction != "out" {
-		return &ValidationError{Field: "direction", Message: `must be "in" or "out"`}
+	var amountF float64
+	if _, err := fmt.Sscanf(input.Amount, "%f", &amountF); err != nil || amountF <= 0 {
+		return &ValidationError{Field: "amount", Message: "must be a positive numeric string, e.g. \"150.00\""}
+	}
+	if input.Direction != DirectionIncome && input.Direction != DirectionExpense {
+		return &ValidationError{Field: "direction", Message: `must be "INCOME" or "EXPENSE"`}
 	}
 	if _, err := time.Parse("2006-01-02", input.Date); err != nil {
 		return &ValidationError{Field: "date", Message: "must be in YYYY-MM-DD format"}

@@ -2,6 +2,11 @@ package transaction
 
 import "time"
 
+const (
+	DirectionIncome  = "INCOME"
+	DirectionExpense = "EXPENSE"
+)
+
 var (
 	ErrDuplicate           = errorSentinel("duplicate client_id")
 	ErrSharedWithoutCouple = errorSentinel("is_shared requires couple")
@@ -17,7 +22,7 @@ func (e errorSentinel) Error() string { return string(e) }
 // CreateInput is the request body for POST /transactions.
 type CreateInput struct {
 	ClientID    string  `json:"client_id"    binding:"required,uuid"`
-	Amount      float64 `json:"amount"       binding:"required"`
+	Amount      string  `json:"amount"       binding:"required"`
 	Direction   string  `json:"direction"    binding:"required"`
 	CategoryID  *string `json:"category_id"`
 	Description *string `json:"description"`
@@ -42,11 +47,11 @@ type Transaction struct {
 
 // UpdateInput holds the optional fields for PUT /transactions/:id.
 type UpdateInput struct {
-	Amount      *float64 `json:"amount"`
-	CategoryID  *string  `json:"category_id"`
-	Description *string  `json:"description"`
-	IsShared    *bool    `json:"is_shared"`
-	Date        *string  `json:"date"`
+	Amount      *string `json:"amount"`
+	CategoryID  *string `json:"category_id"`
+	Description *string `json:"description"`
+	IsShared    *bool   `json:"is_shared"`
+	Date        *string `json:"date"`
 }
 
 // ListInput holds the query params for GET /transactions.

@@ -9,14 +9,13 @@ import (
 
 // targetPcts maps category type to its 50/30/20 target percentage.
 var targetPcts = map[string]string{
-	"necessity":  "50",
-	"leisure":    "30",
-	"investment": "20",
-	"saving":     "20",
+	"NEEDS":   "50",
+	"WANTS":   "30",
+	"SAVINGS": "20",
 }
 
 // allTypes is the fixed order we always include in by_type, even with zero amounts.
-var allTypes = []string{"necessity", "leisure", "investment", "saving"}
+var allTypes = []string{"NEEDS", "WANTS", "SAVINGS"}
 
 type dashboardRepo interface {
 	FetchUserInfo(ctx context.Context, userID string) (UserInfo, error)
@@ -146,7 +145,7 @@ func buildExpenses(typeAmounts []TypeAmount, income string) *ExpensesSummary {
 		var status string
 		if incomeF == 0 {
 			// no income means no budget allocated; every type is under target
-			status = "under"
+			status = "UNDER"
 		} else {
 			status = calcStatus(amt, targetPct(t, incomeF))
 		}
@@ -198,10 +197,9 @@ func addAmounts(a, b string) string {
 // targetPct returns the absolute amount that corresponds to the target percentage of income.
 func targetPct(categoryType string, income float64) float64 {
 	tgt, ok := map[string]float64{
-		"necessity":  50,
-		"leisure":    30,
-		"investment": 20,
-		"saving":     20,
+		"NEEDS":   50,
+		"WANTS":   30,
+		"SAVINGS": 20,
 	}[categoryType]
 	if !ok {
 		return 0
@@ -219,11 +217,11 @@ func pct(amount, income float64) float64 {
 func calcStatus(actual, target float64) string {
 	switch {
 	case actual < target:
-		return "under"
+		return "UNDER"
 	case actual == target:
-		return "met"
+		return "MET"
 	default:
-		return "over"
+		return "OVER"
 	}
 }
 
