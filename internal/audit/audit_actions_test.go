@@ -81,7 +81,7 @@ func TestAudit_DeleteTransaction_CreatesEntry(t *testing.T) {
 	token, userID := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 
 	wc := doReq(t, r, http.MethodPost, "/v1/transactions",
-		`{"client_id":"a0000001-0000-0000-0000-000000000001","amount":200,"direction":"out","date":"2026-10-01"}`,
+		`{"client_id":"a0000001-0000-0000-0000-000000000001","amount":"200.00","direction":"EXPENSE","date":"2026-10-01"}`,
 		token)
 	require.Equal(t, http.StatusCreated, wc.Code)
 	var tx map[string]any

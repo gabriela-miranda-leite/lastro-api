@@ -89,14 +89,14 @@ func insertCategory(t *testing.T, db *sql.DB, userID, name, catType string) stri
 }
 
 // postTx posts a transaction and returns its ID.
-func postTx(t *testing.T, r *gin.Engine, token, clientID string, amount float64, direction, date, categoryID string, isShared bool) string {
+func postTx(t *testing.T, r *gin.Engine, token, clientID string, amount string, direction, date, categoryID string, isShared bool) string {
 	t.Helper()
 	var catPart string
 	if categoryID != "" {
 		catPart = fmt.Sprintf(`,"category_id":%q`, categoryID)
 	}
 	body := fmt.Sprintf(
-		`{"client_id":%q,"amount":%v,"direction":%q,"date":%q,"is_shared":%v%s}`,
+		`{"client_id":%q,"amount":%q,"direction":%q,"date":%q,"is_shared":%v%s}`,
 		clientID, amount, direction, date, isShared, catPart,
 	)
 	w := doReq(t, r, http.MethodPost, "/v1/transactions", body, token)
@@ -159,11 +159,11 @@ func TestIntegration_Dashboard_EmptyMonth(t *testing.T) {
 	expenses := resp["expenses"].(map[string]any)
 	assert.Equal(t, "0.00", expenses["total"])
 
-	for _, ct := range []string{"necessity", "leisure", "investment", "saving"} {
+	for _, ct := range []string{"NEEDS", "WANTS", "SAVINGS"} {
 		bt := expenses["by_type"].(map[string]any)[ct].(map[string]any)
 		assert.Equal(t, "0.00", bt["amount"], "type=%s amount", ct)
 		assert.Equal(t, "0.00", bt["pct"], "type=%s pct", ct)
-		assert.Equal(t, "under", bt["status"], "type=%s status", ct)
+		assert.Equal(t, "UNDER", bt["status"], "type=%s status", ct)
 	}
 }
 
@@ -173,15 +173,15 @@ func TestIntegration_Dashboard_WithTransactions(t *testing.T) {
 
 	token, userID := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
 
-	necCat := insertCategory(t, db, userID, "Alimentação", "necessity")
-	leiCat := insertCategory(t, db, userID, "Cinema", "leisure")
+	necCat := insertCategory(t, db, userID, "Alimentação", "NEEDS")
+	leiCat := insertCategory(t, db, userID, "Cinema", "WANTS")
 
 	// income: 5000
-	postTx(t, r, token, "c0000001-0000-0000-0000-000000000001", 5000, "in", "2026-10-05", "", false)
+	postTx(t, r, token, "c0000001-0000-0000-0000-000000000001", "5000.00", "INCOME", "2026-10-05", "", false)
 	// necessity: 1000 (20% of 5000, target 50% → under)
-	postTx(t, r, token, "c0000001-0000-0000-0000-000000000002", 1000, "out", "2026-10-10", necCat, false)
+	postTx(t, r, token, "c0000001-0000-0000-0000-000000000002", "1000.00", "EXPENSE", "2026-10-10", necCat, false)
 	// leisure: 500 (10% of 5000, target 30% → under)
-	postTx(t, r, token, "c0000001-0000-0000-0000-000000000003", 500, "out", "2026-10-11", leiCat, false)
+	postTx(t, r, token, "c0000001-0000-0000-0000-000000000003", "500.00", "EXPENSE", "2026-10-11", leiCat, false)
 
 	resp := getDashboard(t, r, token, 2026, 10)
 
@@ -190,20 +190,20 @@ func TestIntegration_Dashboard_WithTransactions(t *testing.T) {
 	expenses := resp["expenses"].(map[string]any)
 	assert.Equal(t, "1500.00", expenses["total"])
 
-	nec := byType(t, resp, "necessity")
+	nec := byType(t, resp, "NEEDS")
 	assert.Equal(t, "1000.00", nec["amount"])
 	assert.Equal(t, "20.00", nec["pct"])
 	assert.Equal(t, "50", nec["target_pct"])
-	assert.Equal(t, "under", nec["status"])
+	assert.Equal(t, "UNDER", nec["status"])
 
-	lei := byType(t, resp, "leisure")
+	lei := byType(t, resp, "WANTS")
 	assert.Equal(t, "500.00", lei["amount"])
 	assert.Equal(t, "10.00", lei["pct"])
 	assert.Equal(t, "30", lei["target_pct"])
-	assert.Equal(t, "under", lei["status"])
+	assert.Equal(t, "UNDER", lei["status"])
 
 	// no transactions in investment/saving → zero
-	inv := byType(t, resp, "investment")
+	inv := byType(t, resp, "SAVINGS")
 	assert.Equal(t, "0.00", inv["amount"])
 	assert.Equal(t, "0.00", inv["pct"])
 }
@@ -213,20 +213,20 @@ func TestIntegration_Dashboard_StatusMetAndOver(t *testing.T) {
 	r := setupRouter(db)
 
 	token, userID := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
-	necCat := insertCategory(t, db, userID, "Moradia", "necessity")
-	leiCat := insertCategory(t, db, userID, "Viagem", "leisure")
+	necCat := insertCategory(t, db, userID, "Moradia", "NEEDS")
+	leiCat := insertCategory(t, db, userID, "Viagem", "WANTS")
 
 	// income: 1000
-	postTx(t, r, token, "c0000002-0000-0000-0000-000000000001", 1000, "in", "2026-10-01", "", false)
+	postTx(t, r, token, "c0000002-0000-0000-0000-000000000001", "1000.00", "INCOME", "2026-10-01", "", false)
 	// necessity: exactly 500 (50% of 1000 → met)
-	postTx(t, r, token, "c0000002-0000-0000-0000-000000000002", 500, "out", "2026-10-01", necCat, false)
+	postTx(t, r, token, "c0000002-0000-0000-0000-000000000002", "500.00", "EXPENSE", "2026-10-01", necCat, false)
 	// leisure: 400 (40% of 1000, target 30% → over)
-	postTx(t, r, token, "c0000002-0000-0000-0000-000000000003", 400, "out", "2026-10-01", leiCat, false)
+	postTx(t, r, token, "c0000002-0000-0000-0000-000000000003", "400.00", "EXPENSE", "2026-10-01", leiCat, false)
 
 	resp := getDashboard(t, r, token, 2026, 10)
 
-	assert.Equal(t, "met", byType(t, resp, "necessity")["status"])
-	assert.Equal(t, "over", byType(t, resp, "leisure")["status"])
+	assert.Equal(t, "MET", byType(t, resp, "NEEDS")["status"])
+	assert.Equal(t, "OVER", byType(t, resp, "WANTS")["status"])
 }
 
 func TestIntegration_Dashboard_IncomeZero(t *testing.T) {
@@ -234,13 +234,13 @@ func TestIntegration_Dashboard_IncomeZero(t *testing.T) {
 	r := setupRouter(db)
 
 	token, userID := registerAndLogin(t, r, uniqueEmail(t, "a"), "Senha123")
-	necCat := insertCategory(t, db, userID, "Mercado", "necessity")
-	postTx(t, r, token, "c0000003-0000-0000-0000-000000000001", 200, "out", "2026-10-01", necCat, false)
+	necCat := insertCategory(t, db, userID, "Mercado", "NEEDS")
+	postTx(t, r, token, "c0000003-0000-0000-0000-000000000001", "200.00", "EXPENSE", "2026-10-01", necCat, false)
 
 	resp := getDashboard(t, r, token, 2026, 10)
 
 	assert.Equal(t, "0.00", resp["income"])
-	nec := byType(t, resp, "necessity")
+	nec := byType(t, resp, "NEEDS")
 	assert.Equal(t, "200.00", nec["amount"])
 	assert.Equal(t, "0.00", nec["pct"]) // no division by zero
 }
@@ -260,16 +260,16 @@ func TestIntegration_Dashboard_WithCouple(t *testing.T) {
 
 	tokenA, idA, tokenB, idB := formCouple(t, r, uniqueEmail(t, "a"), uniqueEmail(t, "b"))
 
-	necA := insertCategory(t, db, idA, "Aluguel", "necessity")
-	necB := insertCategory(t, db, idB, "Conta", "necessity")
+	necA := insertCategory(t, db, idA, "Aluguel", "NEEDS")
+	necB := insertCategory(t, db, idB, "Conta", "NEEDS")
 
 	// A earns 4000, spends 1000 necessity
-	postTx(t, r, tokenA, "c0000004-0000-0000-0000-000000000001", 4000, "in", "2026-10-01", "", false)
-	postTx(t, r, tokenA, "c0000004-0000-0000-0000-000000000002", 1000, "out", "2026-10-01", necA, false)
+	postTx(t, r, tokenA, "c0000004-0000-0000-0000-000000000001", "4000.00", "INCOME", "2026-10-01", "", false)
+	postTx(t, r, tokenA, "c0000004-0000-0000-0000-000000000002", "1000.00", "EXPENSE", "2026-10-01", necA, false)
 
 	// B earns 2000, spends 500 necessity
-	postTx(t, r, tokenB, "c0000004-0000-0000-0000-000000000003", 2000, "in", "2026-10-01", "", false)
-	postTx(t, r, tokenB, "c0000004-0000-0000-0000-000000000004", 500, "out", "2026-10-01", necB, false)
+	postTx(t, r, tokenB, "c0000004-0000-0000-0000-000000000003", "2000.00", "INCOME", "2026-10-01", "", false)
+	postTx(t, r, tokenB, "c0000004-0000-0000-0000-000000000004", "500.00", "EXPENSE", "2026-10-01", necB, false)
 
 	resp := getDashboard(t, r, tokenA, 2026, 10)
 
@@ -284,10 +284,10 @@ func TestIntegration_Dashboard_WithCouple(t *testing.T) {
 	assert.Equal(t, "1500.00", coupleExpenses["total"])
 
 	// couple necessity pct = 1500/6000*100 = 25.00 → under (target 50%)
-	coupleNec := coupleExpenses["by_type"].(map[string]any)["necessity"].(map[string]any)
+	coupleNec := coupleExpenses["by_type"].(map[string]any)["NEEDS"].(map[string]any)
 	assert.Equal(t, "1500.00", coupleNec["amount"])
 	assert.Equal(t, "25.00", coupleNec["pct"])
-	assert.Equal(t, "under", coupleNec["status"])
+	assert.Equal(t, "UNDER", coupleNec["status"])
 }
 
 func TestIntegration_Dashboard_IsSharedNotDuplicated(t *testing.T) {
@@ -296,12 +296,12 @@ func TestIntegration_Dashboard_IsSharedNotDuplicated(t *testing.T) {
 
 	tokenA, idA, tokenB, _ := formCouple(t, r, uniqueEmail(t, "a"), uniqueEmail(t, "b"))
 
-	necA := insertCategory(t, db, idA, "Supermercado", "necessity")
+	necA := insertCategory(t, db, idA, "Supermercado", "NEEDS")
 
-	postTx(t, r, tokenA, "c0000005-0000-0000-0000-000000000001", 3000, "in", "2026-10-01", "", false)
-	postTx(t, r, tokenB, "c0000005-0000-0000-0000-000000000002", 3000, "in", "2026-10-01", "", false)
+	postTx(t, r, tokenA, "c0000005-0000-0000-0000-000000000001", "3000.00", "INCOME", "2026-10-01", "", false)
+	postTx(t, r, tokenB, "c0000005-0000-0000-0000-000000000002", "3000.00", "INCOME", "2026-10-01", "", false)
 	// A posts a shared expense of 600
-	postTx(t, r, tokenA, "c0000005-0000-0000-0000-000000000003", 600, "out", "2026-10-01", necA, true)
+	postTx(t, r, tokenA, "c0000005-0000-0000-0000-000000000003", "600.00", "EXPENSE", "2026-10-01", necA, true)
 
 	resp := getDashboard(t, r, tokenA, 2026, 10)
 

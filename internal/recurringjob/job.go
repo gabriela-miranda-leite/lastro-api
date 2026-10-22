@@ -83,7 +83,7 @@ func (j *Job) Run(ctx context.Context, year int, month time.Month) error {
 		_, err := j.db.ExecContext(ctx, `
 			INSERT INTO transactions
 			  (client_id, user_id, category_id, amount, direction, description, is_shared, date)
-			VALUES ($1, $2, $3, $4, 'out', $5, false, $6)
+			VALUES ($1, $2, $3, $4, 'EXPENSE', $5, false, $6)
 			ON CONFLICT (client_id) DO NOTHING
 		`, clientID, userID, catArg, txAmount, name, date)
 		if err != nil {

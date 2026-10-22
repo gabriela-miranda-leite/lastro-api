@@ -27,7 +27,7 @@ func TestWorker_PurgeDeletesExpiredUsers(t *testing.T) {
 	// Give the user a transaction so purgeUser's inner deletes are exercised.
 	_, err = db.ExecContext(context.Background(),
 		`INSERT INTO transactions (id, user_id, amount, direction, date, client_id)
-		 VALUES (gen_random_uuid(), $1, 1.00, 'out', '2020-01-01', gen_random_uuid())`,
+		 VALUES (gen_random_uuid(), $1, 1.00, 'EXPENSE', '2020-01-01', gen_random_uuid())`,
 		oldUserID,
 	)
 	require.NoError(t, err)
