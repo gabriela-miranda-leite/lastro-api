@@ -18,7 +18,7 @@ func NewRepository(db *sql.DB) *Repository {
 
 func (r *Repository) ListByUser(ctx context.Context, userID string) ([]Category, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, user_id, name, type, icon, created_at
+		`SELECT id, user_id, name, type, icon, color, created_at
 		   FROM categories
 		  WHERE user_id = $1
 		  ORDER BY name`,
@@ -32,12 +32,15 @@ func (r *Repository) ListByUser(ctx context.Context, userID string) ([]Category,
 	var cats []Category
 	for rows.Next() {
 		var c Category
-		var icon sql.NullString
-		if err := rows.Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &icon, &c.CreatedAt); err != nil {
+		var icon, color sql.NullString
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &icon, &color, &c.CreatedAt); err != nil {
 			return nil, fmt.Errorf("category.repository.ListByUser scan: %w", err)
 		}
 		if icon.Valid {
 			c.Icon = &icon.String
+		}
+		if color.Valid {
+			c.Color = &color.String
 		}
 		cats = append(cats, c)
 	}
@@ -49,31 +52,34 @@ func (r *Repository) ListByUser(ctx context.Context, userID string) ([]Category,
 
 func (r *Repository) Insert(ctx context.Context, userID string, input CreateInput) (Category, error) {
 	var c Category
-	var icon sql.NullString
+	var icon, color sql.NullString
 	err := r.db.QueryRowContext(ctx,
-		`INSERT INTO categories (user_id, name, type, icon)
-		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, user_id, name, type, icon, created_at`,
-		userID, input.Name, input.Type, input.Icon,
-	).Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &icon, &c.CreatedAt)
+		`INSERT INTO categories (user_id, name, type, icon, color)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id, user_id, name, type, icon, color, created_at`,
+		userID, input.Name, input.Type, input.Icon, input.Color,
+	).Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &icon, &color, &c.CreatedAt)
 	if err != nil {
 		return Category{}, fmt.Errorf("category.repository.Insert: %w", err)
 	}
 	if icon.Valid {
 		c.Icon = &icon.String
 	}
+	if color.Valid {
+		c.Color = &color.String
+	}
 	return c, nil
 }
 
 func (r *Repository) FindByID(ctx context.Context, id string) (Category, error) {
 	var c Category
-	var icon sql.NullString
+	var icon, color sql.NullString
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, user_id, name, type, icon, created_at
+		`SELECT id, user_id, name, type, icon, color, created_at
 		   FROM categories
 		  WHERE id = $1`,
 		id,
-	).Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &icon, &c.CreatedAt)
+	).Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &icon, &color, &c.CreatedAt)
 	if err == sql.ErrNoRows {
 		return Category{}, ErrNotFound
 	}
@@ -83,21 +89,25 @@ func (r *Repository) FindByID(ctx context.Context, id string) (Category, error) 
 	if icon.Valid {
 		c.Icon = &icon.String
 	}
+	if color.Valid {
+		c.Color = &color.String
+	}
 	return c, nil
 }
 
 func (r *Repository) Update(ctx context.Context, id string, input UpdateInput) (Category, error) {
 	var c Category
-	var icon sql.NullString
+	var icon, color sql.NullString
 	err := r.db.QueryRowContext(ctx,
 		`UPDATE categories
-		    SET name = COALESCE($2, name),
-		        type = COALESCE($3, type),
-		        icon = COALESCE($4, icon)
+		    SET name  = COALESCE($2, name),
+		        type  = COALESCE($3, type),
+		        icon  = COALESCE($4, icon),
+		        color = COALESCE($5, color)
 		  WHERE id = $1
-		  RETURNING id, user_id, name, type, icon, created_at`,
-		id, input.Name, input.Type, input.Icon,
-	).Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &icon, &c.CreatedAt)
+		  RETURNING id, user_id, name, type, icon, color, created_at`,
+		id, input.Name, input.Type, input.Icon, input.Color,
+	).Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &icon, &color, &c.CreatedAt)
 	if err == sql.ErrNoRows {
 		return Category{}, ErrNotFound
 	}
@@ -106,6 +116,9 @@ func (r *Repository) Update(ctx context.Context, id string, input UpdateInput) (
 	}
 	if icon.Valid {
 		c.Icon = &icon.String
+	}
+	if color.Valid {
+		c.Color = &color.String
 	}
 	return c, nil
 }

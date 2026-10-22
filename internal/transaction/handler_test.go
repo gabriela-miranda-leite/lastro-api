@@ -106,7 +106,7 @@ func TestIntegration_CreateTransaction(t *testing.T) {
 	t.Run("success returns 201 with created transaction", func(t *testing.T) {
 		token, userID := registerAndLogin(t, r, "tx_ok@test.com", "Senha123")
 
-		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440001","amount":150.50,"direction":"out","date":"2026-10-17","is_shared":false}`
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440001","amount":"150.50","direction":"EXPENSE","date":"2026-10-17","is_shared":false}`
 		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
 
 		assert.Equal(t, http.StatusCreated, w.Code)
@@ -114,14 +114,14 @@ func TestIntegration_CreateTransaction(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		assert.Equal(t, userID, resp["user_id"])
 		assert.Equal(t, "150.50", resp["amount"])
-		assert.Equal(t, "out", resp["direction"])
+		assert.Equal(t, "EXPENSE", resp["direction"])
 		assert.Equal(t, "2026-10-17", resp["date"])
 		assert.NotEmpty(t, resp["id"])
 	})
 
 	t.Run("duplicate client_id returns 200 with existing transaction", func(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "tx_idem@test.com", "Senha123")
-		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440002","amount":50.00,"direction":"in","date":"2026-10-17"}`
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440002","amount":"50.00","direction":"INCOME","date":"2026-10-17"}`
 
 		w1 := req(t, r, http.MethodPost, "/v1/transactions", body, token)
 		require.Equal(t, http.StatusCreated, w1.Code)
@@ -137,7 +137,7 @@ func TestIntegration_CreateTransaction(t *testing.T) {
 
 	t.Run("amount zero returns 422", func(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "tx_amt@test.com", "Senha123")
-		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440003","amount":0,"direction":"out","date":"2026-10-17"}`
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440003","amount":"0","direction":"EXPENSE","date":"2026-10-17"}`
 		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		assert.Contains(t, w.Body.String(), "Amount")
@@ -145,7 +145,7 @@ func TestIntegration_CreateTransaction(t *testing.T) {
 
 	t.Run("invalid direction returns 422", func(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "tx_dir@test.com", "Senha123")
-		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440004","amount":10,"direction":"sideways","date":"2026-10-17"}`
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440004","amount":"10","direction":"sideways","date":"2026-10-17"}`
 		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		assert.Contains(t, w.Body.String(), "direction")
@@ -153,7 +153,7 @@ func TestIntegration_CreateTransaction(t *testing.T) {
 
 	t.Run("invalid date format returns 422", func(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "tx_date@test.com", "Senha123")
-		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440005","amount":10,"direction":"out","date":"17/10/2026"}`
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440005","amount":"10","direction":"EXPENSE","date":"17/10/2026"}`
 		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		assert.Contains(t, w.Body.String(), "date")
@@ -161,14 +161,14 @@ func TestIntegration_CreateTransaction(t *testing.T) {
 
 	t.Run("is_shared without couple returns 400", func(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "tx_shared@test.com", "Senha123")
-		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440006","amount":10,"direction":"out","date":"2026-10-17","is_shared":true}`
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440006","amount":"10","direction":"EXPENSE","date":"2026-10-17","is_shared":true}`
 		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	t.Run("is_shared with couple returns 201", func(t *testing.T) {
 		tokenA, _ := createCouple(t, r, "tx_couple_a@test.com", "tx_couple_b@test.com")
-		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440007","amount":200,"direction":"out","date":"2026-10-17","is_shared":true}`
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440007","amount":"200","direction":"EXPENSE","date":"2026-10-17","is_shared":true}`
 		w := req(t, r, http.MethodPost, "/v1/transactions", body, tokenA)
 		assert.Equal(t, http.StatusCreated, w.Code)
 		var resp map[string]any
@@ -183,10 +183,10 @@ func TestIntegration_CreateTransaction(t *testing.T) {
 		// B creates a category
 		var catID string
 		require.NoError(t, db.QueryRowContext(context.Background(),
-			`INSERT INTO categories (user_id, name, type) VALUES ((SELECT id FROM users WHERE email='tx_catB@test.com'), 'Lazer', 'leisure') RETURNING id`,
+			`INSERT INTO categories (user_id, name, type) VALUES ((SELECT id FROM users WHERE email='tx_catB@test.com'), 'Lazer', 'WANTS') RETURNING id`,
 		).Scan(&catID))
 
-		body := fmt.Sprintf(`{"client_id":"550e8400-e29b-41d4-a716-446655440008","amount":10,"direction":"out","date":"2026-10-17","category_id":%q}`, catID)
+		body := fmt.Sprintf(`{"client_id":"550e8400-e29b-41d4-a716-446655440008","amount":"10","direction":"EXPENSE","date":"2026-10-17","category_id":%q}`, catID)
 		_ = tokenB
 		w := req(t, r, http.MethodPost, "/v1/transactions", body, tokenA)
 		assert.Equal(t, http.StatusForbidden, w.Code)
@@ -197,10 +197,10 @@ func TestIntegration_CreateTransaction(t *testing.T) {
 
 		var catID string
 		require.NoError(t, db.QueryRowContext(context.Background(),
-			`INSERT INTO categories (user_id, name, type) VALUES ((SELECT id FROM users WHERE email='tx_owncat@test.com'), 'Alimentação', 'necessity') RETURNING id`,
+			`INSERT INTO categories (user_id, name, type) VALUES ((SELECT id FROM users WHERE email='tx_owncat@test.com'), 'Alimentação', 'NEEDS') RETURNING id`,
 		).Scan(&catID))
 
-		body := fmt.Sprintf(`{"client_id":"550e8400-e29b-41d4-a716-446655440009","amount":30,"direction":"out","date":"2026-10-17","category_id":%q}`, catID)
+		body := fmt.Sprintf(`{"client_id":"550e8400-e29b-41d4-a716-446655440009","amount":"30","direction":"EXPENSE","date":"2026-10-17","category_id":%q}`, catID)
 		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
 		assert.Equal(t, http.StatusCreated, w.Code)
 		var resp map[string]any
@@ -209,7 +209,7 @@ func TestIntegration_CreateTransaction(t *testing.T) {
 	})
 
 	t.Run("without token returns 401", func(t *testing.T) {
-		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440010","amount":10,"direction":"out","date":"2026-10-17"}`
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440010","amount":"10","direction":"EXPENSE","date":"2026-10-17"}`
 		w := req(t, r, http.MethodPost, "/v1/transactions", body, "")
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
@@ -225,7 +225,7 @@ func TestHandler_Create_InternalError(t *testing.T) {
 	h.RegisterRoutes(r.Group("/v1"))
 
 	httpReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/transactions",
-		strings.NewReader(`{"client_id":"550e8400-e29b-41d4-a716-446655440099","amount":10,"direction":"out","date":"2026-10-17"}`))
+		strings.NewReader(`{"client_id":"550e8400-e29b-41d4-a716-446655440099","amount":"10","direction":"EXPENSE","date":"2026-10-17"}`))
 	httpReq.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httpReq)
@@ -272,13 +272,13 @@ func TestIntegration_ListTransactions(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "list_own@test.com", "Senha123")
 
 		req1 := req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655441001","amount":50,"direction":"out","date":"2026-10-05"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441001","amount":"50","direction":"EXPENSE","date":"2026-10-05"}`,
 			token)
 		require.Equal(t, http.StatusCreated, req1.Code)
 
 		// different month — should not appear
 		req2 := req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655441002","amount":20,"direction":"in","date":"2026-09-01"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441002","amount":"20","direction":"INCOME","date":"2026-09-01"}`,
 			token)
 		require.Equal(t, http.StatusCreated, req2.Code)
 
@@ -293,18 +293,18 @@ func TestIntegration_ListTransactions(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "list_dir@test.com", "Senha123")
 
 		req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655441003","amount":10,"direction":"in","date":"2026-10-01"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441003","amount":"10","direction":"INCOME","date":"2026-10-01"}`,
 			token)
 		req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655441004","amount":20,"direction":"out","date":"2026-10-02"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441004","amount":"20","direction":"EXPENSE","date":"2026-10-02"}`,
 			token)
 
-		w := req(t, r, http.MethodGet, "/v1/transactions?year=2026&month=10&direction=in", "", token)
+		w := req(t, r, http.MethodGet, "/v1/transactions?year=2026&month=10&direction=INCOME", "", token)
 		assert.Equal(t, http.StatusOK, w.Code)
 		var resp []map[string]any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		assert.Len(t, resp, 1)
-		assert.Equal(t, "in", resp[0]["direction"])
+		assert.Equal(t, "INCOME", resp[0]["direction"])
 	})
 
 	t.Run("filter by category_id", func(t *testing.T) {
@@ -312,14 +312,14 @@ func TestIntegration_ListTransactions(t *testing.T) {
 
 		var catID string
 		require.NoError(t, db.QueryRowContext(context.Background(),
-			`INSERT INTO categories (user_id, name, type) VALUES ((SELECT id FROM users WHERE email='list_cat@test.com'), 'Mercado', 'necessity') RETURNING id`,
+			`INSERT INTO categories (user_id, name, type) VALUES ((SELECT id FROM users WHERE email='list_cat@test.com'), 'Mercado', 'NEEDS') RETURNING id`,
 		).Scan(&catID))
 
 		req(t, r, http.MethodPost, "/v1/transactions",
-			fmt.Sprintf(`{"client_id":"550e8400-e29b-41d4-a716-446655441010","amount":50,"direction":"out","date":"2026-10-01","category_id":%q}`, catID),
+			fmt.Sprintf(`{"client_id":"550e8400-e29b-41d4-a716-446655441010","amount":"50","direction":"EXPENSE","date":"2026-10-01","category_id":%q}`, catID),
 			token)
 		req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655441011","amount":30,"direction":"out","date":"2026-10-02"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441011","amount":"30","direction":"EXPENSE","date":"2026-10-02"}`,
 			token)
 
 		w := req(t, r, http.MethodGet,
@@ -346,7 +346,7 @@ func TestIntegration_ListTransactions(t *testing.T) {
 
 		// B creates a transaction
 		req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655441005","amount":75,"direction":"out","date":"2026-10-10"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655441005","amount":"75","direction":"EXPENSE","date":"2026-10-10"}`,
 			tokenB)
 
 		// A queries B's transactions
@@ -412,7 +412,7 @@ func TestIntegration_UpdateTransaction(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "upd_ok@test.com", "Senha123")
 
 		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655442001","amount":100,"direction":"out","date":"2026-10-01"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655442001","amount":"100","direction":"EXPENSE","date":"2026-10-01"}`,
 			token)
 		require.Equal(t, http.StatusCreated, wCreate.Code)
 		var created map[string]any
@@ -420,7 +420,7 @@ func TestIntegration_UpdateTransaction(t *testing.T) {
 		id := created["id"].(string)
 
 		wUpd := req(t, r, http.MethodPut, "/v1/transactions/"+id,
-			`{"amount":250.75,"date":"2026-10-15"}`, token)
+			`{"amount":"250.75","date":"2026-10-15"}`, token)
 		assert.Equal(t, http.StatusOK, wUpd.Code)
 		var resp map[string]any
 		require.NoError(t, json.Unmarshal(wUpd.Body.Bytes(), &resp))
@@ -433,21 +433,21 @@ func TestIntegration_UpdateTransaction(t *testing.T) {
 		tokenB, _ := registerAndLogin(t, r, "upd_ownerB@test.com", "Senha123")
 
 		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655442002","amount":50,"direction":"in","date":"2026-10-01"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655442002","amount":"50","direction":"INCOME","date":"2026-10-01"}`,
 			tokenA)
 		require.Equal(t, http.StatusCreated, wCreate.Code)
 		var created map[string]any
 		require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &created))
 		id := created["id"].(string)
 
-		w := req(t, r, http.MethodPut, "/v1/transactions/"+id, `{"amount":99}`, tokenB)
+		w := req(t, r, http.MethodPut, "/v1/transactions/"+id, `{"amount":"99"}`, tokenB)
 		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
 
 	t.Run("unknown id returns 404", func(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "upd_404@test.com", "Senha123")
 		w := req(t, r, http.MethodPut, "/v1/transactions/00000000-0000-0000-0000-000000000000",
-			`{"amount":10}`, token)
+			`{"amount":"10"}`, token)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
@@ -455,7 +455,7 @@ func TestIntegration_UpdateTransaction(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "upd_amt@test.com", "Senha123")
 
 		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655442003","amount":30,"direction":"out","date":"2026-10-01"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655442003","amount":"30","direction":"EXPENSE","date":"2026-10-01"}`,
 			token)
 		require.Equal(t, http.StatusCreated, wCreate.Code)
 		var created map[string]any
@@ -467,7 +467,7 @@ func TestIntegration_UpdateTransaction(t *testing.T) {
 	})
 
 	t.Run("without token returns 401", func(t *testing.T) {
-		w := req(t, r, http.MethodPut, "/v1/transactions/some-id", `{"amount":10}`, "")
+		w := req(t, r, http.MethodPut, "/v1/transactions/some-id", `{"amount":"10"}`, "")
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
@@ -481,7 +481,7 @@ func TestHandler_Update_InternalError(t *testing.T) {
 
 	httpReq := httptest.NewRequestWithContext(context.Background(),
 		http.MethodPut, "/v1/transactions/some-id",
-		strings.NewReader(`{"amount":10}`))
+		strings.NewReader(`{"amount":"10"}`))
 	httpReq.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httpReq)
@@ -500,7 +500,7 @@ func TestIntegration_DeleteTransaction(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "del_ok@test.com", "Senha123")
 
 		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655443001","amount":80,"direction":"out","date":"2026-10-05"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655443001","amount":"80","direction":"EXPENSE","date":"2026-10-05"}`,
 			token)
 		require.Equal(t, http.StatusCreated, wCreate.Code)
 		var created map[string]any
@@ -521,7 +521,7 @@ func TestIntegration_DeleteTransaction(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "del_audit@test.com", "Senha123")
 
 		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655443002","amount":120,"direction":"in","date":"2026-10-10"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655443002","amount":"120","direction":"INCOME","date":"2026-10-10"}`,
 			token)
 		require.Equal(t, http.StatusCreated, wCreate.Code)
 		var created map[string]any
@@ -545,7 +545,7 @@ func TestIntegration_DeleteTransaction(t *testing.T) {
 		tokenB, _ := registerAndLogin(t, r, "del_ownerB@test.com", "Senha123")
 
 		wCreate := req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655443003","amount":40,"direction":"out","date":"2026-10-01"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655443003","amount":"40","direction":"EXPENSE","date":"2026-10-01"}`,
 			tokenA)
 		require.Equal(t, http.StatusCreated, wCreate.Code)
 		var created map[string]any
@@ -592,7 +592,7 @@ func TestIntegration_Idempotency(t *testing.T) {
 
 	t.Run("same client_id twice returns 200 on second call with identical response", func(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "idem_twice@test.com", "Senha123")
-		body := `{"client_id":"550e8400-e29b-41d4-a716-446655450001","amount":99.99,"direction":"out","date":"2026-10-01"}`
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655450001","amount":"99.99","direction":"EXPENSE","date":"2026-10-01"}`
 
 		w1 := req(t, r, http.MethodPost, "/v1/transactions", body, token)
 		require.Equal(t, http.StatusCreated, w1.Code)
@@ -619,12 +619,12 @@ func TestIntegration_Idempotency(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "idem_diff@test.com", "Senha123")
 
 		w1 := req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655450002","amount":10,"direction":"out","date":"2026-10-01"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655450002","amount":"10","direction":"EXPENSE","date":"2026-10-01"}`,
 			token)
 		require.Equal(t, http.StatusCreated, w1.Code)
 
 		w2 := req(t, r, http.MethodPost, "/v1/transactions",
-			`{"client_id":"550e8400-e29b-41d4-a716-446655450003","amount":10,"direction":"out","date":"2026-10-01"}`,
+			`{"client_id":"550e8400-e29b-41d4-a716-446655450003","amount":"10","direction":"EXPENSE","date":"2026-10-01"}`,
 			token)
 		require.Equal(t, http.StatusCreated, w2.Code)
 
@@ -646,7 +646,7 @@ func TestIntegration_Idempotency(t *testing.T) {
 
 	t.Run("network retry simulation: same client_id three times yields one row", func(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "idem_retry@test.com", "Senha123")
-		body := `{"client_id":"550e8400-e29b-41d4-a716-446655450004","amount":200,"direction":"in","date":"2026-10-15"}`
+		body := `{"client_id":"550e8400-e29b-41d4-a716-446655450004","amount":"200","direction":"INCOME","date":"2026-10-15"}`
 
 		codes := make([]int, 3)
 		for i := range codes {

@@ -133,13 +133,13 @@ func TestIntegration_UpdateMe(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "update@test.com", "Senha123")
 
 		w := req(t, r, http.MethodPut, "/v1/users/me",
-			`{"name":"Nome Novo","monthly_income":5000}`, token)
+			`{"name":"Nome Novo","monthly_income":"5000.00"}`, token)
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		var resp map[string]any
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		assert.Equal(t, "Nome Novo", resp["name"])
-		assert.InDelta(t, 5000.0, resp["monthly_income"], 0.01)
+		assert.Equal(t, "5000.00", resp["monthly_income"])
 		assert.Nil(t, resp["saving_goal_pct"]) // not sent, still null
 		assert.Nil(t, resp["password_hash"])
 	})
@@ -153,7 +153,7 @@ func TestIntegration_UpdateMe(t *testing.T) {
 
 	t.Run("monthly_income zero or negative returns 422", func(t *testing.T) {
 		token, _ := registerAndLogin(t, r, "invalid2@test.com", "Senha123")
-		w := req(t, r, http.MethodPut, "/v1/users/me", `{"monthly_income":-1}`, token)
+		w := req(t, r, http.MethodPut, "/v1/users/me", `{"monthly_income":"-1.00"}`, token)
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		assert.Contains(t, w.Body.String(), "monthly_income")
 	})

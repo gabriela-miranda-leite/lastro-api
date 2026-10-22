@@ -14,8 +14,8 @@ func ptr(s string) *string { return &s }
 func validInput() CreateInput {
 	return CreateInput{
 		ClientID:  "550e8400-e29b-41d4-a716-446655440000",
-		Amount:    100.0,
-		Direction: "out",
+		Amount:    "100.00",
+		Direction: DirectionExpense,
 		IsShared:  false,
 		Date:      "2026-10-17",
 	}
@@ -34,21 +34,21 @@ func TestService_Create_Validation(t *testing.T) {
 	}{
 		{
 			name:      "amount zero",
-			input:     func() CreateInput { i := validInput(); i.Amount = 0; return i }(),
+			input:     func() CreateInput { i := validInput(); i.Amount = "0"; return i }(),
 			wantField: "amount",
-			wantMsg:   "greater than zero",
+			wantMsg:   "positive numeric string",
 		},
 		{
 			name:      "amount negative",
-			input:     func() CreateInput { i := validInput(); i.Amount = -1; return i }(),
+			input:     func() CreateInput { i := validInput(); i.Amount = "-1"; return i }(),
 			wantField: "amount",
-			wantMsg:   "greater than zero",
+			wantMsg:   "positive numeric string",
 		},
 		{
 			name:      "direction invalid",
 			input:     func() CreateInput { i := validInput(); i.Direction = "sideways"; return i }(),
 			wantField: "direction",
-			wantMsg:   `"in" or "out"`,
+			wantMsg:   `"INCOME" or "EXPENSE"`,
 		},
 		{
 			name:      "date wrong format",
@@ -380,8 +380,8 @@ func TestService_List_SameCoupleLookupError(t *testing.T) {
 
 // --- Update ---
 
-func fptr(f float64) *float64 { return &f }
-func bptr(b bool) *bool       { return &b }
+func sptr(s string) *string { return &s }
+func bptr(b bool) *bool     { return &b }
 
 func TestService_Update_NotFound(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
@@ -401,7 +401,7 @@ func TestService_Update_Forbidden(t *testing.T) {
 
 func TestService_Update_AmountZero(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
-	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: fptr(0)})
+	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: sptr("0")})
 	var valErr *ValidationError
 	require.ErrorAs(t, err, &valErr)
 	assert.Equal(t, "amount", valErr.Field)
@@ -409,7 +409,7 @@ func TestService_Update_AmountZero(t *testing.T) {
 
 func TestService_Update_AmountNegative(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
-	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: fptr(-5)})
+	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: sptr("-5")})
 	var valErr *ValidationError
 	require.ErrorAs(t, err, &valErr)
 	assert.Equal(t, "amount", valErr.Field)
@@ -448,7 +448,7 @@ func TestService_Update_Success(t *testing.T) {
 			return updated, nil
 		},
 	}}
-	tx, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: fptr(200)})
+	tx, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: sptr("200.00")})
 	require.NoError(t, err)
 	assert.Equal(t, "200.00", tx.Amount)
 }
@@ -462,7 +462,7 @@ func TestService_Update_RepoUpdateError(t *testing.T) {
 			return Transaction{}, errors.New("db error")
 		},
 	}}
-	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: fptr(50)})
+	_, err := svc.Update(context.Background(), "user-1", "tx-1", UpdateInput{Amount: sptr("50.00")})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "db error")
 }

@@ -14,7 +14,7 @@ func (e *ValidationError) Error() string {
 
 type UpdateInput struct {
 	Name          *string  `json:"name"`
-	MonthlyIncome *float64 `json:"monthly_income"`
+	MonthlyIncome *string  `json:"monthly_income"`
 	SavingGoalPct *float64 `json:"saving_goal_pct"`
 }
 
@@ -26,7 +26,7 @@ type MeResponse struct {
 	ID            string           `json:"id"`
 	Name          string           `json:"name"`
 	Email         string           `json:"email"`
-	MonthlyIncome *float64         `json:"monthly_income"`
+	MonthlyIncome *string          `json:"monthly_income"`
 	SavingGoalPct *float64         `json:"saving_goal_pct"`
 	CoupleID      *string          `json:"couple_id"`
 	CreatedAt     time.Time        `json:"created_at"`
