@@ -231,7 +231,7 @@ func TestIntegration_Export(t *testing.T) {
 		// Insert a transaction directly so buildExport's scan loop is exercised.
 		_, err := db.ExecContext(context.Background(), `
 			INSERT INTO transactions (id, user_id, amount, direction, date, client_id)
-			VALUES (gen_random_uuid(), $1, 100.00, 'out', '2026-01-01', gen_random_uuid())`,
+			VALUES (gen_random_uuid(), $1, 100.00, 'EXPENSE', '2026-01-01', gen_random_uuid())`,
 			userID)
 		require.NoError(t, err)
 

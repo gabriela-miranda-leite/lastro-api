@@ -140,7 +140,7 @@ func TestIntegration_CreateTransaction(t *testing.T) {
 		body := `{"client_id":"550e8400-e29b-41d4-a716-446655440003","amount":"0","direction":"EXPENSE","date":"2026-10-17"}`
 		w := req(t, r, http.MethodPost, "/v1/transactions", body, token)
 		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
-		assert.Contains(t, w.Body.String(), "Amount")
+		assert.Contains(t, w.Body.String(), "amount")
 	})
 
 	t.Run("invalid direction returns 422", func(t *testing.T) {
