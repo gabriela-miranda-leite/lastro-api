@@ -13,6 +13,7 @@ type userService interface {
 	Export(ctx context.Context, userID, ip string) (ExportData, error)
 	Update(ctx context.Context, userID string, input UpdateInput) (MeResponse, error)
 	Delete(ctx context.Context, userID string, input DeleteInput) error
+	ChangePassword(ctx context.Context, userID string, input ChangePasswordInput) error
 }
 
 // Handler handles HTTP requests for the user domain.
@@ -29,6 +30,7 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/users/me", h.me)
 	rg.PUT("/users/me", h.updateMe)
+	rg.PUT("/users/me/password", h.changePassword)
 	rg.GET("/users/me/export", h.export)
 	rg.DELETE("/users/me", h.deleteMe)
 }
@@ -100,6 +102,33 @@ func (h *Handler) export(c *gin.Context) {
 	filename := "export-" + userID + ".json"
 	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
 	c.JSON(http.StatusOK, data)
+}
+
+func (h *Handler) changePassword(c *gin.Context) {
+	var input ChangePasswordInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := c.GetString("user_id")
+	err := h.service.ChangePassword(c.Request.Context(), userID, input)
+	if err != nil {
+		var valErr *ValidationError
+		switch {
+		case errors.As(err, &valErr):
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": valErr.Field + ": " + valErr.Message})
+		case errors.Is(err, ErrInvalidPassword):
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid current password"})
+		case errors.Is(err, ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) me(c *gin.Context) {
