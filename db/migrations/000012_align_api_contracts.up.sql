@@ -8,5 +8,11 @@ UPDATE categories SET type = UPPER(type) WHERE type != UPPER(type);
 ALTER TABLE categories
   ADD CONSTRAINT categories_type_check CHECK (type IN ('NEEDS', 'WANTS', 'SAVINGS'));
 
+ALTER TABLE transactions
+  DROP CONSTRAINT IF EXISTS transactions_direction_check;
+
 UPDATE transactions SET direction = 'INCOME' WHERE direction = 'in';
 UPDATE transactions SET direction = 'EXPENSE' WHERE direction = 'out';
+
+ALTER TABLE transactions
+  ADD CONSTRAINT transactions_direction_check CHECK (direction IN ('INCOME', 'EXPENSE'));

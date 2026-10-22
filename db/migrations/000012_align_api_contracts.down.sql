@@ -1,5 +1,11 @@
+ALTER TABLE transactions
+  DROP CONSTRAINT IF EXISTS transactions_direction_check;
+
 UPDATE transactions SET direction = 'in' WHERE direction = 'INCOME';
 UPDATE transactions SET direction = 'out' WHERE direction = 'EXPENSE';
+
+ALTER TABLE transactions
+  ADD CONSTRAINT transactions_direction_check CHECK (direction IN ('in', 'out'));
 
 ALTER TABLE categories
   DROP CONSTRAINT IF EXISTS categories_type_check;
