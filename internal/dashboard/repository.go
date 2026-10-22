@@ -60,7 +60,7 @@ func (r *Repository) FetchIncome(ctx context.Context, userID string, year, month
 		`SELECT COALESCE(SUM(amount), 0)::numeric(12,2)::text
 		   FROM transactions
 		  WHERE user_id = $1
-		    AND direction = 'in'
+		    AND direction = 'INCOME'
 		    AND EXTRACT(YEAR  FROM date) = $2
 		    AND EXTRACT(MONTH FROM date) = $3
 		    AND deleted_at IS NULL`,
@@ -85,7 +85,7 @@ func (r *Repository) FetchExpensesByType(ctx context.Context, userID string, yea
 		   FROM transactions t
 		   JOIN categories c ON c.id = t.category_id
 		  WHERE t.user_id = $1
-		    AND t.direction = 'out'
+		    AND t.direction = 'EXPENSE'
 		    AND EXTRACT(YEAR  FROM t.date) = $2
 		    AND EXTRACT(MONTH FROM t.date) = $3
 		    AND t.deleted_at IS NULL
