@@ -13,4 +13,5 @@ type repository interface {
 	revokeRefreshToken(ctx context.Context, tokenID string) error
 	revokeRefreshTokenByHash(ctx context.Context, userID, tokenHash string) error
 	revokeAllUserTokens(ctx context.Context, userID string) error
+	savePasswordResetToken(ctx context.Context, userID, tokenHash string) error
 }

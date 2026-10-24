@@ -154,6 +154,16 @@ type loginUserRow struct {
 	PasswordHash string
 }
 
+func (r *Repository) savePasswordResetToken(ctx context.Context, userID, tokenHash string) error {
+	const q = `
+		INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+		VALUES ($1, $2, now() + interval '30 minutes')`
+	if _, err := r.db.ExecContext(ctx, q, userID, tokenHash); err != nil {
+		return fmt.Errorf("auth.repository.savePasswordResetToken: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) findUserByEmail(ctx context.Context, email string) (loginUserRow, error) {
 	const q = `
 		SELECT id, name, email, password_hash
