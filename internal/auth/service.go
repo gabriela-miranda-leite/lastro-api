@@ -179,6 +179,39 @@ func (s *Service) ForgotPassword(ctx context.Context, input ForgotPasswordInput)
 	return nil
 }
 
+func (s *Service) ResetPassword(ctx context.Context, input ResetPasswordInput) error {
+	if err := validatePassword(input.NewPassword); err != nil {
+		return err
+	}
+
+	sum := sha256.Sum256([]byte(input.Token))
+	tokenHash := hex.EncodeToString(sum[:])
+
+	tokenRow, err := s.repo.findPasswordResetToken(ctx, tokenHash)
+	if err != nil {
+		return fmt.Errorf("auth.service.ResetPassword: %w", err)
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), 12)
+	if err != nil {
+		return fmt.Errorf("auth.service.ResetPassword: hash: %w", err)
+	}
+
+	if err := s.repo.updateUserPassword(ctx, tokenRow.UserID, string(hash)); err != nil {
+		return fmt.Errorf("auth.service.ResetPassword: %w", err)
+	}
+
+	if err := s.repo.markPasswordResetTokenUsed(ctx, tokenRow.ID); err != nil {
+		return fmt.Errorf("auth.service.ResetPassword: %w", err)
+	}
+
+	if err := s.repo.revokeAllUserTokens(ctx, tokenRow.UserID); err != nil {
+		return fmt.Errorf("auth.service.ResetPassword: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Service) LogoutAll(ctx context.Context, userID string) error {
 	if err := s.repo.revokeAllUserTokens(ctx, userID); err != nil {
 		return fmt.Errorf("auth.service.LogoutAll: %w", err)

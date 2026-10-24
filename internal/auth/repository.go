@@ -154,12 +154,55 @@ type loginUserRow struct {
 	PasswordHash string
 }
 
+type passwordResetTokenRow struct {
+	ID     string
+	UserID string
+}
+
 func (r *Repository) savePasswordResetToken(ctx context.Context, userID, tokenHash string) error {
 	const q = `
 		INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, now() + interval '30 minutes')`
 	if _, err := r.db.ExecContext(ctx, q, userID, tokenHash); err != nil {
 		return fmt.Errorf("auth.repository.savePasswordResetToken: %w", err)
+	}
+	return nil
+}
+
+// ErrResetTokenInvalid is returned when the token is not found, expired, or already used.
+var ErrResetTokenInvalid = errors.New("invalid or expired password reset token")
+
+func (r *Repository) findPasswordResetToken(ctx context.Context, tokenHash string) (passwordResetTokenRow, error) {
+	const q = `
+		SELECT id, user_id
+		FROM password_reset_tokens
+		WHERE token_hash = $1
+		  AND expires_at > now()
+		  AND used_at IS NULL`
+
+	var row passwordResetTokenRow
+	err := r.db.QueryRowContext(ctx, q, tokenHash).Scan(&row.ID, &row.UserID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return passwordResetTokenRow{}, ErrResetTokenInvalid
+		}
+		return passwordResetTokenRow{}, fmt.Errorf("auth.repository.findPasswordResetToken: %w", err)
+	}
+	return row, nil
+}
+
+func (r *Repository) markPasswordResetTokenUsed(ctx context.Context, tokenID string) error {
+	const q = `UPDATE password_reset_tokens SET used_at = now() WHERE id = $1`
+	if _, err := r.db.ExecContext(ctx, q, tokenID); err != nil {
+		return fmt.Errorf("auth.repository.markPasswordResetTokenUsed: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) updateUserPassword(ctx context.Context, userID, passwordHash string) error {
+	const q = `UPDATE users SET password_hash = $1 WHERE id = $2`
+	if _, err := r.db.ExecContext(ctx, q, passwordHash, userID); err != nil {
+		return fmt.Errorf("auth.repository.updateUserPassword: %w", err)
 	}
 	return nil
 }
