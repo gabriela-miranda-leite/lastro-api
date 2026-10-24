@@ -24,6 +24,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/login", h.login)
 	rg.POST("/refresh", h.refresh)
 	rg.POST("/forgot-password", h.forgotPassword)
+	rg.POST("/reset-password", h.resetPassword)
 }
 
 // RegisterProtectedRoutes registers auth routes that require a valid JWT.
@@ -113,6 +114,29 @@ func (h *Handler) forgotPassword(c *gin.Context) {
 		slog.Warn("forgotPassword: internal error", "error", err)
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "If the email exists, you will receive a reset link"})
+}
+
+func (h *Handler) resetPassword(c *gin.Context) {
+	var input ResetPasswordInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.ResetPassword(c.Request.Context(), input); err != nil {
+		if errors.Is(err, ErrWeakPassword) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, ErrResetTokenInvalid) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Password updated successfully"})
 }
 
 func (h *Handler) register(c *gin.Context) {
