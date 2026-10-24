@@ -13,6 +13,7 @@ type mockRepository struct {
 	revokeRefreshTokenFn       func(ctx context.Context, tokenID string) error
 	revokeRefreshTokenByHashFn func(ctx context.Context, userID, tokenHash string) error
 	revokeAllUserTokensFn      func(ctx context.Context, userID string) error
+	savePasswordResetTokenFn   func(ctx context.Context, userID, tokenHash string) error
 }
 
 func (m *mockRepository) createUser(ctx context.Context, p createUserParams) (userRow, error) {
@@ -67,6 +68,13 @@ func (m *mockRepository) revokeRefreshTokenByHash(ctx context.Context, userID, t
 func (m *mockRepository) revokeAllUserTokens(ctx context.Context, userID string) error {
 	if m.revokeAllUserTokensFn != nil {
 		return m.revokeAllUserTokensFn(ctx, userID)
+	}
+	return nil
+}
+
+func (m *mockRepository) savePasswordResetToken(ctx context.Context, userID, tokenHash string) error {
+	if m.savePasswordResetTokenFn != nil {
+		return m.savePasswordResetTokenFn(ctx, userID, tokenHash)
 	}
 	return nil
 }

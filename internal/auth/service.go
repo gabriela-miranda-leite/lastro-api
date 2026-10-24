@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 	"unicode"
 
@@ -151,6 +152,30 @@ func (s *Service) Logout(ctx context.Context, userID, rawToken string) error {
 	if err := s.repo.revokeRefreshTokenByHash(ctx, userID, tokenHash); err != nil {
 		return fmt.Errorf("auth.service.Logout: %w", err)
 	}
+	return nil
+}
+
+func (s *Service) ForgotPassword(ctx context.Context, input ForgotPasswordInput) error {
+	user, err := s.repo.findUserByEmail(ctx, input.Email)
+	if errors.Is(err, ErrInvalidCredentials) {
+		return nil // email not registered — silently succeed to prevent user enumeration
+	}
+	if err != nil {
+		return fmt.Errorf("auth.service.ForgotPassword: %w", err)
+	}
+
+	raw, hash, err := generateRefreshToken()
+	if err != nil {
+		return fmt.Errorf("auth.service.ForgotPassword: %w", err)
+	}
+
+	if err := s.repo.savePasswordResetToken(ctx, user.ID, hash); err != nil {
+		return fmt.Errorf("auth.service.ForgotPassword: %w", err)
+	}
+
+	// TODO: send email with reset link containing raw token (LASTRO-163)
+	slog.Info("password reset token generated — email dispatch not yet implemented", "user_id", user.ID, "token", raw)
+
 	return nil
 }
 

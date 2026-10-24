@@ -36,3 +36,8 @@ type RefreshInput struct {
 type LogoutInput struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
+
+// ForgotPasswordInput is the request body for POST /auth/forgot-password.
+type ForgotPasswordInput struct {
+	Email string `json:"email" binding:"required,email"`
+}

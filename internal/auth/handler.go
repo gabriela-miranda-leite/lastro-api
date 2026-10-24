@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/register", h.register)
 	rg.POST("/login", h.login)
 	rg.POST("/refresh", h.refresh)
+	rg.POST("/forgot-password", h.forgotPassword)
 }
 
 // RegisterProtectedRoutes registers auth routes that require a valid JWT.
@@ -97,6 +99,20 @@ func (h *Handler) logoutAll(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) forgotPassword(c *gin.Context) {
+	var input ForgotPasswordInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Always return 200 regardless of whether email exists — prevents user enumeration.
+	if err := h.service.ForgotPassword(c.Request.Context(), input); err != nil {
+		slog.Warn("forgotPassword: internal error", "error", err)
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "If the email exists, you will receive a reset link"})
 }
 
 func (h *Handler) register(c *gin.Context) {
