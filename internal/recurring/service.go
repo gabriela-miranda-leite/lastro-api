@@ -3,6 +3,7 @@ package recurring
 import (
 	"context"
 	"fmt"
+	"strconv"
 )
 
 // Service contains business logic for the recurring domain.
@@ -91,8 +92,9 @@ func (s *Service) UpsertOverride(ctx context.Context, userID, recurringID string
 }
 
 func validateCreate(input *CreateInput) error {
-	if input.Amount <= 0 {
-		return &ValidationError{Field: "amount", Message: "must be greater than zero"}
+	v, err := strconv.ParseFloat(input.Amount, 64)
+	if err != nil || v <= 0 {
+		return &ValidationError{Field: "amount", Message: "must be a positive number"}
 	}
 	if input.DueDay < 1 || input.DueDay > 31 {
 		return &ValidationError{Field: "due_day", Message: "must be between 1 and 31"}
@@ -101,8 +103,11 @@ func validateCreate(input *CreateInput) error {
 }
 
 func validateUpdate(input *UpdateInput) error {
-	if input.Amount != nil && *input.Amount <= 0 {
-		return &ValidationError{Field: "amount", Message: "must be greater than zero"}
+	if input.Amount != nil {
+		v, err := strconv.ParseFloat(*input.Amount, 64)
+		if err != nil || v <= 0 {
+			return &ValidationError{Field: "amount", Message: "must be a positive number"}
+		}
 	}
 	if input.DueDay != nil && (*input.DueDay < 1 || *input.DueDay > 31) {
 		return &ValidationError{Field: "due_day", Message: "must be between 1 and 31"}
@@ -117,8 +122,11 @@ func validateOverride(input *OverrideInput) error {
 	if input.Month < 1 || input.Month > 12 {
 		return &ValidationError{Field: "month", Message: "must be between 1 and 12"}
 	}
-	if input.AmountOverride != nil && *input.AmountOverride <= 0 {
-		return &ValidationError{Field: "amount_override", Message: "must be greater than zero"}
+	if input.AmountOverride != nil {
+		v, err := strconv.ParseFloat(*input.AmountOverride, 64)
+		if err != nil || v <= 0 {
+			return &ValidationError{Field: "amount_override", Message: "must be a positive number"}
+		}
 	}
 	return nil
 }

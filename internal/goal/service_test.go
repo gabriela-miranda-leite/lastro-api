@@ -10,7 +10,7 @@ import (
 )
 
 func validCreate() CreateInput {
-	return CreateInput{Year: 2026, Month: 10, GoalAmount: 1000}
+	return CreateInput{Year: 2026, Month: 10, GoalAmount: "1000.00"}
 }
 
 func TestService_Create_Success(t *testing.T) {
@@ -43,7 +43,7 @@ func TestService_Create_InvalidMonth(t *testing.T) {
 func TestService_Create_InvalidGoalAmount(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
 	input := validCreate()
-	input.GoalAmount = 0
+	input.GoalAmount = "0"
 	_, err := svc.Create(context.Background(), "user-1", input)
 	var valErr *ValidationError
 	require.ErrorAs(t, err, &valErr)
@@ -125,18 +125,18 @@ func TestService_List_RepoError(t *testing.T) {
 
 // --- Update ---
 
-func pf(v float64) *float64 { return &v }
+func ps(s string) *string { return &s }
 
 func TestService_Update_Success(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
-	g, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: pf(500)})
+	g, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: ps("500.00")})
 	require.NoError(t, err)
 	assert.Equal(t, "goal-1", g.ID)
 }
 
 func TestService_Update_NegativeAmount(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
-	_, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: pf(-1)})
+	_, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: ps("-1")})
 	var valErr *ValidationError
 	require.ErrorAs(t, err, &valErr)
 	assert.Equal(t, "saved_amount", valErr.Field)
@@ -144,7 +144,7 @@ func TestService_Update_NegativeAmount(t *testing.T) {
 
 func TestService_Update_ZeroAllowed(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
-	_, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: pf(0)})
+	_, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: ps("0")})
 	require.NoError(t, err)
 }
 
@@ -154,7 +154,7 @@ func TestService_Update_NotFound(t *testing.T) {
 			return Goal{}, ErrNotFound
 		},
 	}}
-	_, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: pf(100)})
+	_, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: ps("100.00")})
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
@@ -164,7 +164,7 @@ func TestService_Update_Forbidden(t *testing.T) {
 			return Goal{ID: "goal-1", UserID: "other-user"}, nil
 		},
 	}}
-	_, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: pf(100)})
+	_, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: ps("100.00")})
 	assert.ErrorIs(t, err, ErrForbidden)
 }
 
@@ -174,7 +174,7 @@ func TestService_Update_RepoError(t *testing.T) {
 			return Goal{}, errors.New("db error")
 		},
 	}}
-	_, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: pf(100)})
+	_, err := svc.Update(context.Background(), "user-1", "goal-1", UpdateInput{SavedAmount: ps("100.00")})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "db error")
 }

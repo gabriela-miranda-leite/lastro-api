@@ -63,8 +63,9 @@ func calcStatus(saved, goal string) string {
 }
 
 func validateUpdate(input *UpdateInput) error {
-	if *input.SavedAmount < 0 {
-		return &ValidationError{Field: "saved_amount", Message: "must be zero or positive"}
+	v, err := strconv.ParseFloat(*input.SavedAmount, 64)
+	if err != nil || v < 0 {
+		return &ValidationError{Field: "saved_amount", Message: "must be a non-negative number"}
 	}
 	return nil
 }
@@ -88,8 +89,9 @@ func validateCreate(input *CreateInput) error {
 	if input.Month < 1 || input.Month > 12 {
 		return &ValidationError{Field: "month", Message: "must be between 1 and 12"}
 	}
-	if input.GoalAmount <= 0 {
-		return &ValidationError{Field: "goal_amount", Message: "must be greater than zero"}
+	v, err := strconv.ParseFloat(input.GoalAmount, 64)
+	if err != nil || v <= 0 {
+		return &ValidationError{Field: "goal_amount", Message: "must be a positive number"}
 	}
 	return nil
 }

@@ -61,7 +61,7 @@ func TestE2E_Recurring_FullFlow(t *testing.T) {
 
 	// 2. criar fixo via HTTP
 	w = doE2E(t, r, http.MethodPost, "/v1/recurring",
-		`{"name":"Aluguel","amount":1500,"due_day":5}`, token)
+		`{"name":"Aluguel","amount":"1500","due_day":5}`, token)
 	require.Equal(t, http.StatusCreated, w.Code)
 	var rec map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rec))
@@ -87,7 +87,7 @@ func TestE2E_Recurring_FullFlow(t *testing.T) {
 	assert.Equal(t, 5, txDate.Day())
 
 	// 4. criar override amount via HTTP → valor diferente em novembro
-	body := `{"year":2026,"month":11,"amount_override":1650,"active":true}`
+	body := `{"year":2026,"month":11,"amount_override":"1650","active":true}`
 	w = doE2E(t, r, http.MethodPut, "/v1/recurring/"+recID+"/override", body, token)
 	require.Equal(t, http.StatusOK, w.Code)
 
@@ -139,7 +139,7 @@ func TestE2E_Recurring_JobIdempotent_AfterHTTP(t *testing.T) {
 	userID := loginResp["user"].(map[string]any)["id"].(string)
 
 	doE2E(t, r, http.MethodPost, "/v1/recurring",
-		`{"name":"Netflix","amount":40,"due_day":15}`, token)
+		`{"name":"Netflix","amount":"40","due_day":15}`, token)
 
 	require.NoError(t, job.Run(context.Background(), 2026, time.October))
 	require.NoError(t, job.Run(context.Background(), 2026, time.October))
@@ -178,7 +178,7 @@ func TestE2E_Recurring_DeactivateViaHTTP_ThenJobSkips(t *testing.T) {
 
 	// criar fixo
 	wCreate := doE2E(t, r, http.MethodPost, "/v1/recurring",
-		`{"name":"Gym","amount":80,"due_day":1}`, token)
+		`{"name":"Gym","amount":"80","due_day":1}`, token)
 	require.Equal(t, http.StatusCreated, wCreate.Code)
 	var rec map[string]any
 	require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &rec))
@@ -221,7 +221,7 @@ func TestE2E_Recurring_DeleteViaHTTP_ThenJobIgnores(t *testing.T) {
 	userID := loginResp["user"].(map[string]any)["id"].(string)
 
 	wCreate := doE2E(t, r, http.MethodPost, "/v1/recurring",
-		`{"name":"Temp","amount":50,"due_day":10}`, token)
+		`{"name":"Temp","amount":"50","due_day":10}`, token)
 	require.Equal(t, http.StatusCreated, wCreate.Code)
 	var rec map[string]any
 	require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &rec))
@@ -265,14 +265,14 @@ func TestE2E_Recurring_UpdateAmountViaHTTP_ThenJobUsesNewAmount(t *testing.T) {
 	userID := loginResp["user"].(map[string]any)["id"].(string)
 
 	wCreate := doE2E(t, r, http.MethodPost, "/v1/recurring",
-		`{"name":"Internet","amount":100,"due_day":5}`, token)
+		`{"name":"Internet","amount":"100","due_day":5}`, token)
 	require.Equal(t, http.StatusCreated, wCreate.Code)
 	var rec map[string]any
 	require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &rec))
 	recID := rec["id"].(string)
 
 	// atualizar valor permanente via PUT /recurring/:id
-	doE2E(t, r, http.MethodPut, "/v1/recurring/"+recID, `{"amount":120}`, token)
+	doE2E(t, r, http.MethodPut, "/v1/recurring/"+recID, `{"amount":"120"}`, token)
 
 	require.NoError(t, job.Run(context.Background(), 2026, time.October))
 
@@ -308,7 +308,7 @@ func TestE2E_Recurring_OverrideDoesNotAffectOtherMonths(t *testing.T) {
 	userID := loginResp["user"].(map[string]any)["id"].(string)
 
 	wCreate := doE2E(t, r, http.MethodPost, "/v1/recurring",
-		`{"name":"Aluguel","amount":2000,"due_day":1}`, token)
+		`{"name":"Aluguel","amount":"2000","due_day":1}`, token)
 	require.Equal(t, http.StatusCreated, wCreate.Code)
 	var rec map[string]any
 	require.NoError(t, json.Unmarshal(wCreate.Body.Bytes(), &rec))
@@ -316,7 +316,7 @@ func TestE2E_Recurring_OverrideDoesNotAffectOtherMonths(t *testing.T) {
 
 	// override só em outubro
 	doE2E(t, r, http.MethodPut, "/v1/recurring/"+recID+"/override",
-		`{"year":2026,"month":10,"amount_override":2500,"active":true}`, token)
+		`{"year":2026,"month":10,"amount_override":"2500","active":true}`, token)
 
 	require.NoError(t, job.Run(context.Background(), 2026, time.October))
 	require.NoError(t, job.Run(context.Background(), 2026, time.November))
