@@ -27,7 +27,7 @@ type Recurring struct {
 // CreateInput is the request body for POST /recurring.
 type CreateInput struct {
 	Name       string  `json:"name"        binding:"required"`
-	Amount     float64 `json:"amount"      binding:"required"`
+	Amount     string  `json:"amount"      binding:"required"`
 	DueDay     int     `json:"due_day"     binding:"required"`
 	CategoryID *string `json:"category_id"`
 	Active     *bool   `json:"active"` // defaults to true if nil
@@ -35,11 +35,11 @@ type CreateInput struct {
 
 // UpdateInput holds optional fields for PUT /recurring/:id.
 type UpdateInput struct {
-	Name       *string  `json:"name"`
-	Amount     *float64 `json:"amount"`
-	DueDay     *int     `json:"due_day"`
-	CategoryID *string  `json:"category_id"`
-	Active     *bool    `json:"active"`
+	Name       *string `json:"name"`
+	Amount     *string `json:"amount"`
+	DueDay     *int    `json:"due_day"`
+	CategoryID *string `json:"category_id"`
+	Active     *bool   `json:"active"`
 }
 
 // RecurringOverride is a monthly override for a recurring expense.
@@ -55,10 +55,10 @@ type RecurringOverride struct {
 
 // OverrideInput is the request body for PUT /recurring/:id/override.
 type OverrideInput struct {
-	Year           int      `json:"year"  binding:"required"`
-	Month          int      `json:"month" binding:"required"`
-	AmountOverride *float64 `json:"amount_override"`
-	Active         bool     `json:"active"`
+	Year           int     `json:"year"  binding:"required"`
+	Month          int     `json:"month" binding:"required"`
+	AmountOverride *string `json:"amount_override"`
+	Active         bool    `json:"active"`
 }
 
 // ValidationError carries a field-level validation failure.

@@ -26,9 +26,9 @@ type Goal struct {
 
 // CreateInput is the request body for POST /goals.
 type CreateInput struct {
-	Year       int     `json:"year"         binding:"required"`
-	Month      int     `json:"month"        binding:"required"`
-	GoalAmount float64 `json:"goal_amount"  binding:"required"`
+	Year       int    `json:"year"         binding:"required"`
+	Month      int    `json:"month"        binding:"required"`
+	GoalAmount string `json:"goal_amount"  binding:"required"`
 }
 
 // GoalWithStatus wraps Goal with a calculated status field.
@@ -45,7 +45,7 @@ type ListInput struct {
 
 // UpdateInput is the request body for PUT /goals/:id.
 type UpdateInput struct {
-	SavedAmount *float64 `json:"saved_amount" binding:"required"`
+	SavedAmount *string `json:"saved_amount" binding:"required"`
 }
 
 // ValidationError carries a field-level validation failure.

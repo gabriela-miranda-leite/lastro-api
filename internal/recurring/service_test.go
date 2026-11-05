@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func fptr(f float64) *float64 { return &f }
-func iptr(i int) *int         { return &i }
-func bptr(b bool) *bool       { return &b }
+func sptr(s string) *string { return &s }
+func iptr(i int) *int       { return &i }
+func bptr(b bool) *bool     { return &b }
 
 func validCreate() CreateInput {
-	return CreateInput{Name: "Aluguel", Amount: 1500, DueDay: 10}
+	return CreateInput{Name: "Aluguel", Amount: "1500.00", DueDay: 10}
 }
 
 // --- Create ---
@@ -22,7 +22,7 @@ func validCreate() CreateInput {
 func TestService_Create_AmountZero(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
 	input := validCreate()
-	input.Amount = 0
+	input.Amount = "0"
 	_, err := svc.Create(context.Background(), "user-1", input)
 	var valErr *ValidationError
 	require.ErrorAs(t, err, &valErr)
@@ -32,7 +32,7 @@ func TestService_Create_AmountZero(t *testing.T) {
 func TestService_Create_AmountNegative(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
 	input := validCreate()
-	input.Amount = -10
+	input.Amount = "-10"
 	_, err := svc.Create(context.Background(), "user-1", input)
 	var valErr *ValidationError
 	require.ErrorAs(t, err, &valErr)
@@ -97,7 +97,7 @@ func TestService_Update_Forbidden(t *testing.T) {
 
 func TestService_Update_InvalidAmount(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
-	_, err := svc.Update(context.Background(), "user-1", "rec-1", UpdateInput{Amount: fptr(-1)})
+	_, err := svc.Update(context.Background(), "user-1", "rec-1", UpdateInput{Amount: sptr("-1")})
 	var valErr *ValidationError
 	require.ErrorAs(t, err, &valErr)
 	assert.Equal(t, "amount", valErr.Field)
@@ -134,7 +134,7 @@ func TestService_Update_RepoError(t *testing.T) {
 			return Recurring{}, errors.New("db error")
 		},
 	}}
-	_, err := svc.Update(context.Background(), "user-1", "rec-1", UpdateInput{Amount: fptr(100)})
+	_, err := svc.Update(context.Background(), "user-1", "rec-1", UpdateInput{Amount: sptr("100.00")})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "db error")
 }
@@ -223,8 +223,7 @@ func TestService_UpsertOverride_InvalidYear(t *testing.T) {
 
 func TestService_UpsertOverride_InvalidAmountOverride(t *testing.T) {
 	svc := &Service{repo: &mockRepository{}}
-	amt := -10.0
-	_, err := svc.UpsertOverride(context.Background(), "user-1", "rec-1", OverrideInput{Year: 2026, Month: 5, AmountOverride: &amt})
+	_, err := svc.UpsertOverride(context.Background(), "user-1", "rec-1", OverrideInput{Year: 2026, Month: 5, AmountOverride: sptr("-10")})
 	var valErr *ValidationError
 	require.ErrorAs(t, err, &valErr)
 	assert.Equal(t, "amount_override", valErr.Field)
